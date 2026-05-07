@@ -103,6 +103,56 @@ The table must allow the manager to look up any elevator and see its key details
 
 ---
 
+## Tailwind CSS Class Definitions
+
+Use these exact Tailwind class lists for each element to avoid ambiguity. Do not add or remove classes unless explicitly required in this spec.
+
+### Global
+
+- **Page body**: `min-h-screen bg-slate-100 font-sans text-slate-900`
+- **Root layout wrapper**: `flex min-h-screen`
+
+### Sidebar
+
+- **Sidebar container**: `w-64 shrink-0 bg-[#1E2430] text-white`
+- **Sidebar product name**: `px-6 py-6 text-lg font-semibold`
+- **Sidebar nav container**: `flex flex-col gap-1 px-2`
+- **Sidebar link (default)**: `rounded-md px-4 py-2 text-sm text-slate-200 hover:bg-[#2B3548]`
+- **Sidebar link (active)**: `flex items-center rounded-md bg-[#2B3548] px-4 py-2 text-sm font-medium border-l-4 border-[#4DA3FF]`
+
+### Main Content
+
+- **Main content container**: `flex-1 p-8`
+- **Header container**: `mb-6`
+- **Page title**: `text-2xl font-semibold`
+- **Subtitle**: `mt-1 text-sm text-slate-600`
+
+### Summary Cards
+
+- **Cards row**: `mb-8 grid gap-4 md:grid-cols-3`
+- **Card container**: `rounded-lg border border-slate-200 bg-white p-5`
+- **Card label**: `text-xs uppercase tracking-wide text-slate-500`
+- **Card value**: `mt-2 text-3xl font-bold`
+
+### Table
+
+- **Table section container**: `rounded-lg border border-slate-200 bg-white`
+- **Table section header**: `border-b border-slate-200 px-4 py-3`
+- **Table section title**: `text-sm font-semibold text-slate-700`
+- **Table wrapper**: `overflow-x-auto`
+- **Table element**: `min-w-full text-left text-sm`
+- **Table header row**: `bg-slate-200 text-slate-700`
+- **Table header cell**: `px-3 py-2 font-semibold`
+- **Table body row (odd)**: `border-b border-slate-200 bg-white`
+- **Table body row (even)**: `border-b border-slate-200 bg-slate-50`
+- **Table body cell**: `px-3 py-2`
+
+### Overdue Inspection Cell
+
+- **Overdue "Yes" cell**: `bg-[#FDE2E2] text-[#B91C1C]`
+
+---
+
 ## Data Assumptions
 
 - The dashboard is static: all data is loaded from the files at build time. There is no live database connection.

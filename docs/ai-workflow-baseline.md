@@ -19,3 +19,25 @@ Sometimes the model forgets context I already provided, which is frustrating.
 ## Confidence level
 - Confidence (1–5): 3
 - Verification: I review the code and outputs to ensure they match what I expected.
+
+## AI Log
+
+### Task 3 — Dashboard specification
+
+**Task**: Task 3 (Dashboard specification)
+
+**Prompt**: "Create a technical specification for the Rocket Elevators Operations Dashboard. It must define layout, data sources and join logic, summary metrics, detail table columns and behavior, visual style, and data assumptions. The spec must be explicit and must not leave open choices or alternatives."
+
+**What happened**: Copilot first produced a spec but left some optional choices, including wording like "for example" and "e.g." in a few places. That made the output slightly ambiguous for a spec that needs fixed decisions. I asked for stricter definitions, and it removed the open-ended phrasing and set exact values.
+
+**What I would change**: I would be more explicit from the start that no alternatives are allowed and that every UI and data rule must be fixed (colors, labels, formats, and text). Being this specific avoids follow-up corrections and results in a cleaner, unambiguous specification.
+
+### Task 4 — Tailwind class specificity
+
+**Task**: Task 4 (Tailwind class definitions)
+
+**Prompt**: "Add explicit Tailwind CSS class definitions for the final dashboard so the UI is deterministic and not open to interpretation."
+
+**What happened**: When Tailwind classes are not defined precisely, the outputs vary across different prompts and responses, which is not the goal for a fixed UI spec. I asked for exact class lists so the result is consistent.
+
+**What I would change**: I will always require explicit Tailwind class lists for every UI element to prevent inconsistent results between prompts.
