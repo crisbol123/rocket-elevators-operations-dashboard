@@ -6,10 +6,20 @@ Create a static Operations Dashboard that allows the operations manager to view 
 
 ---
 
+## Technology Stack
+
+- **Implementation**: A single static HTML file. No frameworks, no build step.
+- **CSS**: Tailwind CSS loaded via CDN (`<script src="https://cdn.tailwindcss.com"></script>`). No local Tailwind installation.
+- **Sorting**: Implemented with vanilla JavaScript embedded in a `<script>` tag at the bottom of the HTML file. No external JS libraries.
+- **Data**: All data is embedded directly in the HTML file at build time as JavaScript variables. There is no runtime fetch, API call, or database connection.
+- **Output file**: Save the finished dashboard as `platform/index.html`.
+
+---
+
 ## Page Layout
 
 - **Overall layout**: Two-column layout.
-- **Left column (fixed sidebar)**: Vertical navigation area with the product name at the top and a simple list of links in this exact order: Dashboard, Inspections, Licenses, Reports. The sidebar remains visible at all times.
+- **Left column (fixed sidebar)**: Vertical navigation area with the product name at the top and a simple list of links in this exact order: Dashboard, Inspections, Licenses, Reports. The sidebar remains visible at all times. The **Dashboard** link is always rendered in the active style; the remaining three links are rendered in the default style.
 - **Right column (main content)**: Contains a page header, summary metrics, and the detailed table.
 - **Header area (main content, top)**: Page title "Operations Dashboard" and the exact subtitle "Fleet status overview for all registered elevators".
 - **Summary metrics row (main content, below header)**: A single row of three summary cards showing key fleet metrics.
@@ -138,7 +148,7 @@ Use these exact Tailwind class lists for each element to avoid ambiguity. Do not
 
 - **Table section container**: `rounded-lg border border-slate-200 bg-white`
 - **Table section header**: `border-b border-slate-200 px-4 py-3`
-- **Table section title**: `text-sm font-semibold text-slate-700`
+- **Table section title**: `text-sm font-semibold text-slate-700` — display the text **"Elevator Fleet"**
 - **Table wrapper**: `overflow-x-auto`
 - **Table element**: `min-w-full text-left text-sm`
 - **Table header row**: `bg-slate-200 text-slate-700`
