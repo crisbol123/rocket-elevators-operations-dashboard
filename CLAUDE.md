@@ -11,12 +11,10 @@ Internal operations dashboard that replaces a manual spreadsheet workflow, showi
 
 ## Directory Structure
 
-```
 /platform      # HTML for the operations dashboard UI
 /intelligence  # Jupyter notebooks for analytics and data exploration
 /data          # Shared datasets used by platform and intelligence
 /docs          # Specs, reports, and project documentation
-```
 
 ## Data Files (`/data`)
 
@@ -29,4 +27,5 @@ Internal operations dashboard that replaces a manual spreadsheet workflow, showi
 
 ## Coding Conventions
 - Use Python type hints in all function signatures
-- Use single quotes for Python strings
+- Use HTMX attributes (hx-get, hx-post, etc.) for all dynamic interactions
+- When asked about code, do not edit it unless explicitly instructed to do so

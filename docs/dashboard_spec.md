@@ -31,11 +31,9 @@ Create a static Operations Dashboard that allows the operations manager to view 
 
 Three files are used to build the dashboard. Join them on the elevator identifier before rendering any data.
 
-| File | Role | Join Key |
-|------|------|----------|
-| `installed.json` | Primary device registry — type, status, location | `Elevating devices number` |
-| `license.csv` | License number and expiry date | `ElevatingDevicesNumber` |
-| `inspection.csv` | Most recent inspection date and outcome | `ElevatingDevicesNumber` |
+- `installed.json` — Role: Primary device registry (type, status, location). Join key: `Elevating devices number`.
+- `license.csv` — Role: License number and expiry date. Join key: `ElevatingDevicesNumber`.
+- `inspection.csv` — Role: Most recent inspection date and outcome. Join key: `ElevatingDevicesNumber`.
 
 **Join procedure:**
 
@@ -49,9 +47,6 @@ Three files are used to build the dashboard. Join them on the elevator identifie
 - `Latest_INSPECTION_Date` in `inspection.csv` is stored as `M/D/YYYY`.
 - Parse all dates before any comparison or display. Display all dates in the dashboard as `YYYY-MM-DD`.
 
-**Files not used in this dashboard:** `order.csv`, `altered.json`, and `incident.json` are reserved for future sections (Inspections, Reports). Do not read or reference them.
-
----
 
 ## Summary Cards
 
@@ -83,16 +78,14 @@ The table must allow the manager to look up any elevator and see its key details
 
 ### Columns
 
-| # | Column Name | Source Field | Source File | Type | Display Format |
-|---|-------------|-------------|-------------|------|----------------|
-| 1 | Elevator ID | `Elevating devices number` | `installed.json` | Number | Integer, no decimals, no thousand separators |
-| 2 | License Number | `ElevatingDevicesLicenseNumber` | `license.csv` | Text | Exact value as stored; do not normalize, reformat, or add any prefix |
-| 3 | Location | `Location of Device` | `installed.json` | Text | Single line, exact value as stored |
-| 4 | Elevator Type | `Device Type` | `installed.json` | Text | Exact value as stored; do not translate or normalize values |
-| 5 | Status | `DeviceStatus` | `installed.json` | Text | Exact value as stored; do not translate or normalize values |
-| 6 | License Expiry Date | `LICENSEEXPIRYDATE` | `license.csv` | Date | `YYYY-MM-DD` (parse from `DD-MMM-YY` before display) |
-| 7 | Last Inspection Date | `Latest_INSPECTION_Date` | `inspection.csv` | Date | `YYYY-MM-DD` (parse from `M/D/YYYY` before display) |
-| 8 | Overdue Inspection | Derived | — | Text | `"Yes"` if the last inspection date is earlier than today minus 365 days, or if there is no inspection record; `"No"` otherwise |
+1. Elevator ID — Source field: `Elevating devices number` (installed.json). Type: Number. Display: Integer, no decimals, no thousand separators.
+2. License Number — Source field: `ElevatingDevicesLicenseNumber` (license.csv). Type: Text. Display: Exact value as stored; do not normalize, reformat, or add any prefix.
+3. Location — Source field: `Location of Device` (installed.json). Type: Text. Display: Single line, exact value as stored.
+4. Elevator Type — Source field: `Device Type` (installed.json). Type: Text. Display: Exact value as stored; do not translate or normalize values.
+5. Status — Source field: `DeviceStatus` (installed.json). Type: Text. Display: Exact value as stored; do not translate or normalize values.
+6. License Expiry Date — Source field: `LICENSEEXPIRYDATE` (license.csv). Type: Date. Display: `YYYY-MM-DD` (parse from `DD-MMM-YY` before display).
+7. Last Inspection Date — Source field: `Latest_INSPECTION_Date` (inspection.csv). Type: Date. Display: `YYYY-MM-DD` (parse from `M/D/YYYY` before display).
+8. Overdue Inspection — Source: Derived. Type: Text. Display: "Yes" if the last inspection date is earlier than today minus 365 days, or if there is no inspection record; "No" otherwise.
 
 ### Table Behavior
 
@@ -121,27 +114,23 @@ Every color used in the dashboard is listed below. Use these exact values — do
 
 ### Brand / Custom Colors
 
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `sidebar-bg` | `#1E2430` | Sidebar background |
-| `sidebar-active-bg` | `#2B3548` | Active nav link background; default link hover background |
-| `sidebar-accent` | `#4DA3FF` | Active nav link left border |
-| `overdue-bg` | `#FDE2E2` | Background of "Yes" cells in the Overdue Inspection column |
-| `overdue-text` | `#B91C1C` | Text color of "Yes" cells in the Overdue Inspection column |
+- Token: `sidebar-bg` — Hex: `#1E2430` — Usage: Sidebar background
+- Token: `sidebar-active-bg` — Hex: `#2B3548` — Usage: Active nav link background; default link hover background
+- Token: `sidebar-accent` — Hex: `#4DA3FF` — Usage: Active nav link left border
+- Token: `overdue-bg` — Hex: `#FDE2E2` — Usage: Background of "Yes" cells in the Overdue Inspection column
+- Token: `overdue-text` — Hex: `#B91C1C` — Usage: Text color of "Yes" cells in the Overdue Inspection column
 
 ### Neutral Colors (Tailwind Slate Scale)
 
-| Tailwind class | Usage |
-|----------------|-------|
-| `bg-white` / `text-white` | Sidebar text; card backgrounds; table odd row background; pagination button background |
-| `bg-slate-50` | Table even row background; pagination button hover background |
-| `bg-slate-100` | Page background |
-| `bg-slate-200` / `border-slate-200` | Table header background; all border colors (cards, table, pagination footer) |
-| `border-slate-300` | Pagination button border |
-| `text-slate-500` | Card label text |
-| `text-slate-600` | Page subtitle; pagination "Showing X–Y" label |
-| `text-slate-700` | Table header text; table section title; pagination "Page X of Y" text; pagination button text |
-| `text-slate-900` | Body text (default) |
+- Tailwind class: `bg-white` / `text-white` — Usage: Sidebar text; card backgrounds; table odd row background; pagination button background
+- Tailwind class: `bg-slate-50` — Usage: Table even row background; pagination button hover background
+- Tailwind class: `bg-slate-100` — Usage: Page background
+- Tailwind class: `bg-slate-200` / `border-slate-200` — Usage: Table header background; all border colors (cards, table, pagination footer)
+- Tailwind class: `border-slate-300` — Usage: Pagination button border
+- Tailwind class: `text-slate-500` — Usage: Card label text
+- Tailwind class: `text-slate-600` — Usage: Page subtitle; pagination "Showing X–Y" label
+- Tailwind class: `text-slate-700` — Usage: Table header text; table section title; pagination "Page X of Y" text; pagination button text
+- Tailwind class: `text-slate-900` — Usage: Body text (default)
 
 ---
 
