@@ -173,3 +173,14 @@ Prompt: "I am defining the device_type field in the Data Model for the dashboard
 What happened: The subagent returned 11 distinct values, with `Passenger Elevator` (42,405) being by far the most common, followed by `Freight Elevator` (2,912) and `LULA Elevator` (1,254). The remaining types are rare edge cases. All values were added to the Data Model. No data quality issues were found.
 
 What I would change: Nothing. The pattern of using a subagent to profile a column before writing its allowed values into the spec is working consistently across all three datasets.
+
+
+## AND-102 Task 3 — Context management decision (refocus from data prep to HTMX and FastAPI)
+
+Context management action: /clear — cleared the session context after completing prepare_data.py to refocus on the FastAPI server and HTMX interactivity deliverables.
+
+What happened: After finishing Part A (prepare_data.py), the session context had accumulated significant detail about CSV filtering logic, pandas operations, and the elevator_fleet.csv output format. That context was useful for the data preparation step but was dead weight for Part B and Part C, where the relevant knowledge is FastAPI routing, Jinja2 templating, and HTMX state management. Carrying it forward would have biased the model toward data-layer concerns when the remaining tasks were entirely about the server and frontend interaction layer.
+
+Why the action was taken: A /clear was issued before starting the server implementation so the model would enter Part B with a clean context anchored on the HTMX and FastAPI requirements rather than continuing to reason about pandas filtering. The tradeoff is that any data-layer context needed later has to be re-established explicitly, but for a task with a hard boundary between data prep and server work that cost is low.
+
+What I would change: I would issue the /clear earlier — specifically right after running prepare_data.py and confirming the output CSV was correct, rather than waiting until the server work had already started. Clearing at the right boundary, not just approximately near it, keeps the context tighter throughout the task.

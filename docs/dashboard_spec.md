@@ -103,7 +103,8 @@ The table must allow the manager to look up any elevator and see its key details
 | Column | Display rule |
 |---|---|
 | Elevator ID | Integer, no decimals, no thousand separators |
-| Address | Strip everything from the first Canadian postal code pattern (`/[A-Z]\d[A-Z]/`) onwards. Replace the double space separator with `, `. Convert to title case. Example: `111 WELLESLEY ST W  TORONTO M7A 1A2 ON CA` → `111 Wellesley St W, Toronto` |
+| Location | Strip everything from the first Canadian postal code pattern (`/[A-Z]\d[A-Z]/`) onwards. Replace the double space separator with `, `. Convert to title case. Example: `111 WELLESLEY ST W  TORONTO M7A 1A2 ON CA` → `111 Wellesley St W, Toronto` |
+| City | Text after the double space separator, before the postal code. Convert to title case. Example: `Toronto` |
 | License Status | Exact value as stored; do not translate or normalize values |
 | License Expiry Date | `YYYY-MM-DD` |
 | Expired | "Yes" if `license_expiry_date` is earlier than today; "No" otherwise |
@@ -116,20 +117,52 @@ The table must allow the manager to look up any elevator and see its key details
 ### Table Behavior
 
 - **Default sort**: By Elevator ID ascending.
-- **Row count**: Display records paginated — 30 rows per page. Do not render all rows at once.
-- **Pagination controls**: Render a pagination bar below the table with Previous and Next buttons and the current page indicator in the format `Page X of Y`. Disable Previous on the first page and Next on the last page.
-- **Total count label**: Above the pagination bar, show a single line with the total number of records in the format `Showing X–Y of Z elevators` (e.g. `Showing 1–30 of 46,936 elevators`), updating it on every page change.
-- **Row shading**: Alternate between a white and a light-grey background on each row to aid scanning.
-- **Header row**: Bold text, visually distinct background (slightly darker than the alternating row colors).
+- **Row count**: Display records paginated — **10 rows per page**. Do not render all rows at once.
+- **Pagination controls**: Render a pagination bar below the table with `← Previous` and `Next →` buttons and the current page indicator in the format `Page X of Y`. Disable Previous on the first page and Next on the last page.
+- **Total count label**: Show `Showing X–Y of Z elevators` in the pagination bar, updating on every page change.
+- **Row shading**: Alternate between white and `bg-slate-50/50`. Add `hover:bg-blue-50/30` on row hover.
+- **Header row**: `bg-slate-100`, semibold, `text-slate-600`. Bottom border separates header from body.
+- **Empty state**: If no rows match the active filters, show a single centered message: "No elevators match the selected filters."
+
+## AND-102 Task 3
+
+### Filtering
+
+All filters render inside the table fragment above the table. A filter change resets the page to 1 and returns a new fragment. Filter state is preserved across sort and pagination interactions.
+
+| Filter | Type | Options |
+|---|---|---|
+| License Status | Dropdown | All Statuses / Active (`ACTIVE`) / Pending Renewal (`PENDING_RENEWAL`) |
+| Expired | Button group | All / Valid (not expired) / Expired (expiry date < today) |
+
+### Sorting
+
+Sortable columns are clickable headers. Clicking a column sorts ascending; clicking the same column again reverses to descending. A `↑` / `↓` indicator shows the active sort direction; `↕` marks unsorted columns. Sort state is preserved across filter and pagination interactions.
+
+| Column | Default direction |
+|---|---|
+| Elevator ID | Ascending |
+| Expiry Date | Ascending |
+
+### State Management
+
+All interactive state (`status`, `expired`, `sort_by`, `sort_dir`, `page`) is carried as query parameters on every request to `GET /fragments/table`. No client-side JavaScript manages state. Hidden `<input>` elements inside the fragment hold current values; `hx-include` collects them on each interaction; `hx-vals` overrides only the value being changed. The server always receives the full state and returns a fully rendered fragment.
 
 ---
 
 ## Visual Style
 
-Clean, minimal style suitable for an internal operations tool. All colors are defined in the Color Palette section below — do not use any color not listed there.
+Clean, minimal style suitable for an internal operations tool.
 
-- **Typography**: Sans-serif font throughout using `Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif`. Card values must be `1.875rem` (`text-3xl`) and bold. Table body text must be `0.9rem` and regular weight.
-- **Spacing**: Table cell padding must be exactly `8px` vertical and `12px` horizontal.
+- **Typography**: `Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif`. Card values: `text-3xl font-bold`. Table body: `text-sm` (`0.875rem`). Elevator ID and dates: `font-mono`.
+- **Spacing**: Table cell padding `px-5 py-3`.
+- **Cards**: `rounded-xl border border-slate-200 bg-white shadow-sm` with a `border-t-4` color accent — blue (`#4DA3FF`) for Total, emerald for Active, red for Expired. Card value text is color-coded to match the accent.
+- **Sidebar**: Add an `Operations` subtitle below the brand name. Nav links include a small SVG icon to the left of the label.
+- **Header**: Title and subtitle on the left.
+- **Table section header**: Shows title plus a subtitle with total record count and active filter description.
+- **License Status badge**: Colored pill (`rounded-full`, `text-xs font-medium`) — `ACTIVE` → emerald, `PENDING_RENEWAL` → amber, all others → slate.
+- **Expired badge**: Colored pill — `Yes` → red, `No` → emerald.
+- **Row hover**: `hover:bg-slate-50 transition-colors` on every row.
 
 ---
 
