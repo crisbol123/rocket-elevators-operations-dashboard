@@ -7,9 +7,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif; }
-    th { cursor: pointer; user-select: none; }
-    .si { margin-left: 4px; opacity: 0.35; font-size: 0.7rem; }
-    .si.on { opacity: 1; }
   </style>
 </head>
 <body class="min-h-screen bg-slate-100 font-sans text-slate-900">
@@ -46,7 +43,7 @@
         <div id="c-active" class="mt-2 text-3xl font-bold">—</div>
       </div>
       <div class="rounded-lg border border-slate-200 bg-white p-5">
-        <div class="text-xs uppercase tracking-wide text-slate-500">Overdue Inspections</div>
+        <div class="text-xs uppercase tracking-wide text-slate-500">Expireds</div>
         <div id="c-overdue" class="mt-2 text-3xl font-bold">—</div>
       </div>
     </div>
@@ -60,14 +57,11 @@
         <table class="min-w-full text-left text-sm">
           <thead class="bg-slate-200 text-slate-700">
             <tr>
-              <th class="px-3 py-2 font-semibold" onclick="srt(0)">Elevator ID<span class="si on" id="si0">↑</span></th>
-              <th class="px-3 py-2 font-semibold" onclick="srt(1)">License Number<span class="si" id="si1">↕</span></th>
-              <th class="px-3 py-2 font-semibold" onclick="srt(2)">Location<span class="si" id="si2">↕</span></th>
-              <th class="px-3 py-2 font-semibold" onclick="srt(3)">Elevator Type<span class="si" id="si3">↕</span></th>
-              <th class="px-3 py-2 font-semibold" onclick="srt(4)">Status<span class="si" id="si4">↕</span></th>
-              <th class="px-3 py-2 font-semibold" onclick="srt(5)">License Expiry Date<span class="si" id="si5">↕</span></th>
-              <th class="px-3 py-2 font-semibold" onclick="srt(6)">Last Inspection Date<span class="si" id="si6">↕</span></th>
-              <th class="px-3 py-2 font-semibold" onclick="srt(7)">Overdue Inspection<span class="si" id="si7">↕</span></th>
+              <th class="px-3 py-2 font-semibold">Elevator ID</th>
+              <th class="px-3 py-2 font-semibold">Location</th>
+              <th class="px-3 py-2 font-semibold">License Status</th>
+              <th class="px-3 py-2 font-semibold">License Expiry Date</th>
+              <th class="px-3 py-2 font-semibold">Expired</th>
             </tr>
           </thead>
           <tbody id="tb"></tbody>
@@ -100,9 +94,8 @@ const PAGE_SIZE = 30;
 let DATA   = [];
 let SORTED = [];
 let page   = 1;
-let sortCol = 0, sortDir = 1;
 
-// ── Date parsers ──────────────────────────────────────────────────────────────
+// ── Date parser ───────────────────────────────────────────────────────────────
 
 function parseLicenseDate(s) {
   // DD-MMM-YY — two-digit year: 00-29 → 2000-2029, 30-99 → 1930-1999
@@ -119,24 +112,22 @@ function parseLicenseDate(s) {
   return new Date(y, m, d);
 }
 
-function parseInspectionDate(s) {
-  // M/D/YYYY
-  if (!s) return null;
-  const parts = s.trim().split('/');
-  if (parts.length !== 3) return null;
-  const m = parseInt(parts[0], 10) - 1;
-  const d = parseInt(parts[1], 10);
-  const y = parseInt(parts[2], 10);
-  if (isNaN(m) || isNaN(d) || isNaN(y)) return null;
-  return new Date(y, m, d);
-}
-
 function fmtDate(dt) {
   if (!dt) return '';
   const y = dt.getFullYear();
   const m = String(dt.getMonth() + 1).padStart(2, '0');
   const d = String(dt.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+// ── Location formatter ─────────────────────────────────────────────────────────
+
+function fmtLocation(s) {
+  if (!s) return '';
+  const match = s.match(/[A-Z]\d[A-Z]/);
+  const trimmed = match ? s.slice(0, match.index).trim() : s.trim();
+  const toTitle = str => str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  return trimmed.split(/  +/).map(toTitle).join(', ');
 }
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
@@ -168,64 +159,31 @@ function splitRow(line) {
   return result;
 }
 
-// ── Load and join ─────────────────────────────────────────────────────────────
+// ── Load data ─────────────────────────────────────────────────────────────────
 
 async function loadData() {
-  const [instRes, licRes, inspRes] = await Promise.all([
-    fetch('../data/installed.json'),
-    fetch('../data/license.csv'),
-    fetch('../data/inspection.csv'),
-  ]);
+  const licRows = parseCsv(await (await fetch('../data/license.csv')).text());
 
-  const installed = await instRes.json();
-  const licRows   = parseCsv(await licRes.text());
-  const inspRows  = parseCsv(await inspRes.text());
-
-  // license map: device id → row
-  const licMap = {};
-  for (const row of licRows) {
-    const id = parseInt(row['ElevatingDevicesNumber'], 10);
-    if (!isNaN(id)) licMap[id] = row;
-  }
-
-  // inspection map: device id → row with latest inspection date
-  const inspMap = {};
-  for (const row of inspRows) {
-    const id = parseInt(row['ElevatingDevicesNumber'], 10);
-    if (isNaN(id)) continue;
-    const dt = parseInspectionDate(row['Latest_INSPECTION_Date']);
-    if (!inspMap[id] || (dt && dt > inspMap[id]._dt)) {
-      inspMap[id] = { ...row, _dt: dt };
-    }
-  }
-
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 365);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   let total = 0, active = 0, overdue = 0;
 
-  DATA = installed.map(dev => {
-    const id   = dev['Elevating devices number'];
-    const lic  = licMap[id]  || {};
-    const insp = inspMap[id] || {};
-
-    const licExpiry  = parseLicenseDate(lic['LICENSEEXPIRYDATE']);
-    const lastInsp   = insp._dt || null;
-    const isOverdue  = !lastInsp || lastInsp < cutoff;
+  DATA = licRows.map(row => {
+    const id        = parseInt(row['ElevatingDevicesNumber'], 10);
+    const licExpiry = parseLicenseDate(row['LICENSEEXPIRYDATE']);
+    const isExpired = !licExpiry || licExpiry < today;
 
     total++;
-    if ((dev['DeviceStatus'] || '').toLowerCase() === 'active') active++;
-    if (isOverdue) overdue++;
+    if ((row['LICENSESTATUS'] || '').toUpperCase() === 'ACTIVE') active++;
+    if (isExpired) overdue++;
 
     return [
-      id,
-      lic['ElevatingDevicesLicenseNumber'] || '',
-      dev['Location of Device'] || '',
-      dev['Device Type'] || '',
-      dev['DeviceStatus'] || '',
+      isNaN(id) ? '' : id,
+      fmtLocation(row['LocationoftheElevatingDevice']),
+      row['LICENSESTATUS'] || '',
       fmtDate(licExpiry),
-      fmtDate(lastInsp),
-      isOverdue ? 'Yes' : 'No',
+      isExpired ? 'Yes' : 'No',
     ];
   });
 
@@ -233,20 +191,11 @@ async function loadData() {
   document.getElementById('c-active').textContent  = active.toLocaleString();
   document.getElementById('c-overdue').textContent = overdue.toLocaleString();
 
-  applySort();
-}
-
-// ── Sort + paginate ───────────────────────────────────────────────────────────
-
-function applySort() {
-  SORTED = [...DATA].sort((a, b) => {
-    const va = a[sortCol], vb = b[sortCol];
-    if (va === vb) return 0;
-    return (va < vb ? -1 : 1) * sortDir;
-  });
-  page = 1;
+  SORTED = [...DATA].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
   render();
 }
+
+// ── Paginate ──────────────────────────────────────────────────────────────────
 
 function goPage(p) {
   const pages = Math.ceil(SORTED.length / PAGE_SIZE);
@@ -275,7 +224,7 @@ function render() {
       ? 'border-b border-slate-200 bg-white'
       : 'border-b border-slate-200 bg-slate-50';
     const cells = r.map((v, ci) => {
-      if (ci === 7 && v === 'Yes')
+      if (ci === 4 && v === 'Yes')
         return `<td class="px-3 py-2 bg-[#FDE2E2] text-[#B91C1C]">${esc(v)}</td>`;
       return `<td class="px-3 py-2">${esc(v)}</td>`;
     }).join('');
@@ -287,16 +236,6 @@ function render() {
   document.getElementById('pg-info').textContent  = `Page ${page} of ${pages}`;
   document.getElementById('pg-prev').disabled = page === 1;
   document.getElementById('pg-next').disabled = page === pages;
-}
-
-function srt(c) {
-  sortDir = (sortCol === c) ? -sortDir : 1;
-  sortCol = c;
-  document.querySelectorAll('.si').forEach(el => { el.textContent = '↕'; el.classList.remove('on'); });
-  const si = document.getElementById('si' + c);
-  si.textContent = sortDir === 1 ? '↑' : '↓';
-  si.classList.add('on');
-  applySort();
 }
 
 loadData();

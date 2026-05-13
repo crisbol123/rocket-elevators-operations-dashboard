@@ -120,7 +120,7 @@ What happened: The model hesitated between ElevatingDevicesNumber and ElevatingD
 What I would change: I would explicitly state that the identifier must be the one used to join with other tables, not just any unique column.
 
 
----
+
 
 # Summary
 
@@ -137,3 +137,39 @@ The Task 6 identifier selection came down to a subtle distinction between statis
 One thing that stood out in a smaller way was the Task 1 safety check, where Copilot verified that the file did not already exist before creating it. That looked like an error in the output, but it was actually a reasonable precaution. I mention this because it is easy to misread model behavior as a problem when it is actually doing something sensible. Reading the output carefully before concluding something went wrong is worth the extra seconds.
 
 If I had to collapse all of this into a single working principle, it would be something like: the model is only as specific as your prompt, and prompts that leave anything open will produce outputs that vary. The practical checklist I have landed on is to define every label's exact text, every file's exact path, every technology choice, every classification rule, and to always name the prior context you want the model to carry forward. It sounds like a lot, but most of these only require one extra sentence in the prompt, and they save significantly more time than they cost by cutting down the rounds of correction.
+
+
+## AND-102, Task 2 — Data Model (DeviceStatus exploration)
+
+Prompt: "I am defining the status field in the Data Model for the dashboard spec. Before I write the allowed values, use a subagent to check installed.json and return all distinct values in the DeviceStatus column so I do not load the full dataset into the main session."
+
+What happened: The subagent returned five distinct values: `Active`, `Customer Shutdown`, `Inactive`, `TSSA Shutdown`, and `Undergoing Major Alt`. These were not documented anywhere in the project. Having the exact values allowed me to define the `status` field in the Data Model precisely and raised a follow-up question: whether `Undergoing Major Alt` and `TSSA Shutdown` should be treated differently from `Inactive` in the Overdue Inspection logic. Keeping the exploration in a subagent avoided loading the full JSON dataset into the main session context.
+
+What I would change: I would run this kind of data profiling at the start of every task that touches a new dataset, before writing any spec or code. Discovering that `TSSA Shutdown` exists only after defining the Data Model meant I had to reconsider the overdue logic retroactively. Profiling first would have surfaced that decision point earlier.
+
+
+## AND-102, Task 2 — Data Model (LICENSESTATUS exploration)
+
+Prompt: "I am defining the license_status field in the Data Model for the dashboard spec. Before I write the allowed values, use a subagent to check license.csv and return all distinct values in the LICENSESTATUS column with their counts, so I do not load the full dataset into the main session."
+
+What happened: The subagent returned 11 distinct values: `ACTIVE` (42,665), `CANCELLED_NOT_RENEWED` (1,163), `PENDING_RENEWAL` (632), `TERMINATED` (475), `BY REQUEST` (337), `EXPIRED` (68), `HOLD_TSD` (24), `TERMINATED DECEASED` (6), `CANCELLED_BY_CUST_REQ` (6), `ENTERED` (4), and `CANCELLED` (3). The counts showed that the vast majority of records are `ACTIVE`, and that the remaining statuses are either administrative or edge cases. All values were added directly to the Data Model in the spec. Keeping the exploration in a subagent prevented the full CSV dataset from entering the main session context.
+
+What I would change: Nothing significant. Requesting counts alongside the distinct values was the right call — it revealed that some statuses like `ENTERED` and `CANCELLED` are near-empty edge cases, which is useful context when deciding how to handle them in filtering logic.
+
+
+## AND-102, Task 2 — Data Model (InspectionOutcome exploration)
+
+Prompt: "I am defining the last_inspection_outcome field in the Data Model for the dashboard spec. Before I write the allowed values, use a subagent to check inspection.csv and return all distinct values in the InspectionOutcome column with their counts, so I do not load the full dataset into the main session."
+
+What happened: The subagent returned over 30 distinct values, with `Follow up` (53,801) and `Passed` (25,716) being the most frequent. It also claimed some rows contained date strings instead of categorical values. That claim turned out to be wrong — a follow-up check against the raw file found zero rows matching a date pattern in that column. The incorrect finding was initially written into the spec and had to be removed after verification.
+
+What I would change: Always verify subagent findings that describe data quality issues before writing them into a spec. The subagent summary described what it intended to find, not necessarily what was actually in the data.
+
+
+## AND-102, Task 2 — Data Model (Device Type exploration)
+
+Prompt: "I am defining the device_type field in the Data Model for the dashboard spec. Before I write the allowed values, use a subagent to check installed.json and return all distinct values in the Device Type column with their counts, so I do not load the full dataset into the main session."
+
+What happened: The subagent returned 11 distinct values, with `Passenger Elevator` (42,405) being by far the most common, followed by `Freight Elevator` (2,912) and `LULA Elevator` (1,254). The remaining types are rare edge cases. All values were added to the Data Model. No data quality issues were found.
+
+What I would change: Nothing. The pattern of using a subagent to profile a column before writing its allowed values into the spec is working consistently across all three datasets.

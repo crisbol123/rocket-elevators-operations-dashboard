@@ -27,6 +27,34 @@ Create a static Operations Dashboard that allows the operations manager to view 
 
 ---
 
+
+## AND-102 Task 2
+
+## Data Model
+
+The Elevator is the core entity the dashboard works with. Each record in the joined dataset represents one elevator.
+
+| Field | Type | Source dataset | Source column | Description |
+|---|---|---|---|---|
+| `elevator_id` | Number | `license.csv` | `ElevatingDevicesNumber` | Unique device identifier |
+| `location` | Text | `license.csv` | `LocationoftheElevatingDevice` | Full location of the device |
+| `device_type` | Text | `installed.json` | `Device Type` | Category of elevating device |
+| `status` | Text | `installed.json` | `DeviceStatus` | Operational state — see enumerated values below |
+| `license_number` | Text | `license.csv` | `ElevatingDevicesLicenseNumber` | License identifier; blank if no license record |
+| `license_status` | Text | `license.csv` | `LICENSESTATUS` | Current license status — see enumerated values below |
+| `license_expiry_date` | Date | `license.csv` | `LICENSEEXPIRYDATE` | Date the license expires; stored as `DD-MMM-YY` |
+| `last_inspection_date` | Date | `inspection.csv` | `Latest_INSPECTION_Date` | Date of most recent inspection; stored as `M/D/YYYY` |
+| `last_inspection_outcome` | Text | `inspection.csv` | `InspectionOutcome` | Result of most recent inspection — see enumerated values below |
+
+### Enumerated Values
+
+| Field | Known Values |
+|---|---|
+| `status` | `Active`, `Inactive`, `Customer Shutdown`, `TSSA Shutdown`, `Undergoing Major Alt` |
+| `license_status` | `ACTIVE`, `CANCELLED_NOT_RENEWED`, `PENDING_RENEWAL`, `TERMINATED`, `BY REQUEST`, `EXPIRED`, `HOLD_TSD`, `TERMINATED DECEASED`, `CANCELLED_BY_CUST_REQ`, `ENTERED`, `CANCELLED` |
+| `last_inspection_outcome` | `Passed`, `Follow up`, `DC Follow up`, `All Orders Resolved`, `Complete`, `Shutdown`, `Follow up Major`, `Follow up Sub Major`, `Follow Up Initial`, `Unable to Inspect`, `Fail Initial`, `Passed Major`, `Incomplete`, `Vol Shut Down`, `Follow up Sub`, `Passed Sub`, `DC Follow up Intial`, `MCP DC Follow up`, `Fail Sub`, `Extend Time to Comply`, `MCP Follow up`, `Undergoing Major Alt`, `Complete Enforcement`, `DC Follow up Sub`, `Not Required`, `Cancelled`, `Dismantled`, `Fail` |
+---
+
 ## Data Sources and Join Logic
 
 Three files are used to build the dashboard. Join them on the elevator identifier before rendering any data.
@@ -41,12 +69,6 @@ Three files are used to build the dashboard. Join them on the elevator identifie
 2. Left-join `license.csv` on `ElevatingDevicesNumber` to add license fields. If a device has no license record, leave those fields blank.
 3. For `inspection.csv`, first reduce it to one row per elevator by taking the row with the latest `Latest_INSPECTION_Date` for each `ElevatingDevicesNumber`. Then left-join that reduced table onto the base. If a device has no inspection record, leave those fields blank.
 4. The final joined dataset has one row per elevator and is the source for both the summary cards and the detail table.
-
-**Date parsing:**
-- `LICENSEEXPIRYDATE` in `license.csv` is stored as `DD-MMM-YY`. Two-digit years: treat 00–29 as 2000–2029 and 30–99 as 1930–1999.
-- `Latest_INSPECTION_Date` in `inspection.csv` is stored as `M/D/YYYY`.
-- Parse all dates before any comparison or display. Display all dates in the dashboard as `YYYY-MM-DD`.
-
 
 ## Summary Cards
 
@@ -64,11 +86,11 @@ Provide three summary cards in a single horizontal row. Each card includes a lab
 - **Definition**: Count of elevators currently in active service.
 - **Calculation**: Count rows from `installed.json` where `DeviceStatus` equals `"Active"` (case-insensitive comparison).
 
-### Card 3 — Overdue Inspections
+### Card 3 — Expireds
 
-- **Label**: "Overdue Inspections"
-- **Definition**: Count of elevators whose last inspection happened more than one year ago.
-- **Calculation**: For each elevator, take its most recent `Latest_INSPECTION_Date` from `inspection.csv`. Count elevators where that date is strictly earlier than today minus 365 days. Elevators with no inspection record at all are also counted as overdue.
+- **Label**: "Expireds"
+- **Definition**: Count of elevators whose license has expired.
+- **Calculation**: Count elevators where `license_expiry_date` is strictly earlier than today, or where there is no license record.
 
 ---
 
@@ -78,19 +100,22 @@ The table must allow the manager to look up any elevator and see its key details
 
 ### Columns
 
-1. Elevator ID — Source field: `Elevating devices number` (installed.json). Type: Number. Display: Integer, no decimals, no thousand separators.
-2. License Number — Source field: `ElevatingDevicesLicenseNumber` (license.csv). Type: Text. Display: Exact value as stored; do not normalize, reformat, or add any prefix.
-3. Location — Source field: `Location of Device` (installed.json). Type: Text. Display: Single line, exact value as stored.
-4. Elevator Type — Source field: `Device Type` (installed.json). Type: Text. Display: Exact value as stored; do not translate or normalize values.
-5. Status — Source field: `DeviceStatus` (installed.json). Type: Text. Display: Exact value as stored; do not translate or normalize values.
-6. License Expiry Date — Source field: `LICENSEEXPIRYDATE` (license.csv). Type: Date. Display: `YYYY-MM-DD` (parse from `DD-MMM-YY` before display).
-7. Last Inspection Date — Source field: `Latest_INSPECTION_Date` (inspection.csv). Type: Date. Display: `YYYY-MM-DD` (parse from `M/D/YYYY` before display).
-8. Overdue Inspection — Source: Derived. Type: Text. Display: "Yes" if the last inspection date is earlier than today minus 365 days, or if there is no inspection record; "No" otherwise.
+| Column | Display rule |
+|---|---|
+| Elevator ID | Integer, no decimals, no thousand separators |
+| Address | Strip everything from the first Canadian postal code pattern (`/[A-Z]\d[A-Z]/`) onwards. Replace the double space separator with `, `. Convert to title case. Example: `111 WELLESLEY ST W  TORONTO M7A 1A2 ON CA` → `111 Wellesley St W, Toronto` |
+| License Status | Exact value as stored; do not translate or normalize values |
+| License Expiry Date | `YYYY-MM-DD` |
+| Expired | "Yes" if `license_expiry_date` is earlier than today; "No" otherwise |
+
+**Date parsing:**
+- `LICENSEEXPIRYDATE` in `license.csv` is stored as `DD-MMM-YY`. Two-digit years: treat 00–29 as 2000–2029 and 30–99 as 1930–1999.
+- `Latest_INSPECTION_Date` in `inspection.csv` is stored as `M/D/YYYY`.
+- Parse all dates before any comparison or display. Display all dates in the dashboard as `YYYY-MM-DD`.
 
 ### Table Behavior
 
 - **Default sort**: By Elevator ID ascending.
-- **Sortable columns**: Every column must be sortable by clicking its header. Clicking once sorts ascending; clicking again sorts descending. Changing the sort column or direction must always reset the view to page 1.
 - **Row count**: Display records paginated — 30 rows per page. Do not render all rows at once.
 - **Pagination controls**: Render a pagination bar below the table with Previous and Next buttons and the current page indicator in the format `Page X of Y`. Disable Previous on the first page and Next on the last page.
 - **Total count label**: Above the pagination bar, show a single line with the total number of records in the format `Showing X–Y of Z elevators` (e.g. `Showing 1–30 of 46,936 elevators`), updating it on every page change.
@@ -117,8 +142,8 @@ Every color used in the dashboard is listed below. Use these exact values — do
 - Token: `sidebar-bg` — Hex: `#1E2430` — Usage: Sidebar background
 - Token: `sidebar-active-bg` — Hex: `#2B3548` — Usage: Active nav link background; default link hover background
 - Token: `sidebar-accent` — Hex: `#4DA3FF` — Usage: Active nav link left border
-- Token: `overdue-bg` — Hex: `#FDE2E2` — Usage: Background of "Yes" cells in the Overdue Inspection column
-- Token: `overdue-text` — Hex: `#B91C1C` — Usage: Text color of "Yes" cells in the Overdue Inspection column
+- Token: `overdue-bg` — Hex: `#FDE2E2` — Usage: Background of "Yes" cells in the Expired column
+- Token: `overdue-text` — Hex: `#B91C1C` — Usage: Text color of "Yes" cells in the Expired column
 
 ### Neutral Colors (Tailwind Slate Scale)
 
@@ -178,9 +203,9 @@ Use these exact Tailwind class lists for each element to avoid ambiguity. Do not
 - **Table body row (even)**: `border-b border-slate-200 bg-slate-50`
 - **Table body cell**: `px-3 py-2`
 
-### Overdue Inspection Cell
+### Expired Cell
 
-- **Overdue "Yes" cell**: `bg-[#FDE2E2] text-[#B91C1C]`
+- **Expired "Yes" cell**: `bg-[#FDE2E2] text-[#B91C1C]`
 
 ### Pagination
 
