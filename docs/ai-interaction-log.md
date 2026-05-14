@@ -184,3 +184,21 @@ What happened: After finishing Part A (prepare_data.py), the session context had
 Why the action was taken: A /clear was issued before starting the server implementation so the model would enter Part B with a clean context anchored on the HTMX and FastAPI requirements rather than continuing to reason about pandas filtering. The tradeoff is that any data-layer context needed later has to be re-established explicitly, but for a task with a hard boundary between data prep and server work that cost is low.
 
 What I would change: I would issue the /clear earlier — specifically right after running prepare_data.py and confirming the output CSV was correct, rather than waiting until the server work had already started. Clearing at the right boundary, not just approximately near it, keeps the context tighter throughout the task.
+
+
+## AND-102 Task 5 — ETL Pipeline (context management during location comparison)
+
+Context management action: /compact with focus instruction — issued after finishing the location column analysis in Merge 1 Part 3.
+
+What happened: After deciding on postal code as the matching key and dropping the 143 rows, the session had a lot of accumulated context from the location exploration that was no longer useful. I issued a /compact telling the model to keep the merge logic and drop the exploratory detail, so it stayed focused on the pipeline instead of drifting back toward location string analysis.
+
+What I would change: I would compact right after confirming the row count, not a step later. The boundary was clean and I waited slightly too long.
+
+
+## AND-102 Task 5 — ETL Pipeline (subagent exploration before merge decisions)
+
+Prompt: Before writing any merge code, I used subagents to explore the structure of each incoming dataset and confirm the relationship between elevators and the new data.
+
+What happened: For Merge 3 this was especially useful. The subagent confirmed that the relationship was one-to-many — one elevator, up to 24 inspections — and that no inspection ever covered more than one elevator. That made the tradeoffs between a straight join, most-recent-only, and aggregation concrete instead of theoretical, and we landed on aggregation before writing a single line of code.
+
+What I would change: I would do this for every merge from the start, not just when the relationship feels unclear. Merge 1's join key was obvious from column names, but running the exploration upfront costs almost nothing and prevents surprises mid-merge.
