@@ -202,3 +202,12 @@ Prompt: Before writing any merge code, I used subagents to explore the structure
 What happened: For Merge 3 this was especially useful. The subagent confirmed that the relationship was one-to-many — one elevator, up to 24 inspections — and that no inspection ever covered more than one elevator. That made the tradeoffs between a straight join, most-recent-only, and aggregation concrete instead of theoretical, and we landed on aggregation before writing a single line of code.
 
 What I would change: I would do this for every merge from the start, not just when the relationship feels unclear. Merge 1's join key was obvious from column names, but running the exploration upfront costs almost nothing and prevents surprises mid-merge.
+
+## AND-102 Task 6 — NLP Analysis (subagent to choose between LDA and K-Means)
+
+Prompt: Before choosing an NLP technique, I used a subagent to compare LDA topic modeling against TF-IDF + K-Means clustering for a dataset of short incident narratives with a median length of 12 words.
+
+What happened: The subagent returned a clear recommendation for TF-IDF + K-Means with a specific reason: LDA assumes each document contains a mixture of topics, which requires enough words per document to produce stable co-occurrence statistics. At 12 words per narrative, most documents are too short for LDA to converge on coherent topics. K-Means was recommended because it handles short texts well, is deterministic with a fixed random seed, and outputs actual incident sentences per cluster rather than abstract word distributions — making results easier to interpret for a non-technical audience. Keeping this research in a subagent meant the exploration did not accumulate in the main session context, which is visible in the lower cache creation tokens for Task 6 compared to Task 5.
+
+What I would change: Nothing significant. Using a subagent for an open-ended research question before committing to an implementation approach is a pattern worth repeating. The cost of spawning the subagent is low and the output was directly usable as the justification paragraph in the notebook.
+

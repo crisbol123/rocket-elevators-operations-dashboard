@@ -4,6 +4,8 @@
 **Prepared for:** Operations Team
 **Date:** May 14, 2026
 
+**Presentation recording:** https://drive.google.com/drive/u/0/folders/1xBpEftlTYf2xitADMlhCscfbrqKrUltK
+
 ---
 
 ## 1. Data Integration Summary
@@ -77,3 +79,6 @@ Door-related incidents account for 25.5% of all reports and are among the most p
 
 **2. Flag buildings with recurring water incidents for joint review with property management.**
 The two water-related clusters together represent 27.7% of all incidents. These are not elevator malfunctions — they are building plumbing failures that damage elevator infrastructure. Identifying the buildings where water incidents repeat and escalating to property management is a higher-leverage intervention than servicing the elevators in isolation.
+
+**3. Shift from reactive to proactive maintenance using the unified dataset.**
+The merged dataset now includes inspection pass rates and last inspection outcomes for every device in the fleet. This makes it possible to identify at-risk devices before an incident occurs, rather than after, by surfacing those with consistently poor inspection records or recent failures as high-priority in the dashboard.
