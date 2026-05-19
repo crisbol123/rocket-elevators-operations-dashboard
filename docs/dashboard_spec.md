@@ -248,3 +248,221 @@ Use these exact Tailwind class lists for each element to avoid ambiguity. Do not
 - **Previous / Next button**: `rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40`
 - **Page indicator** (`Page X of Y`): `text-sm text-slate-700`
 
+---
+
+## AND-103 Task 1
+
+## Interaction Specification
+
+---
+
+### Interaction 1 — Elevator Detail Panel
+
+#### 1. Outcomes
+
+When a user clicks any row in the elevator table, a detail panel slides in from the right showing the full record for that elevator. The panel contains:
+
+- **Header:** Elevator ID (monospace, large), device type, and current status badge.
+- **Basic info section:** License number, license status badge, license expiry date, location (full untruncated string).
+- **Inspection history section:** A list of all inspections for that elevator, sorted by date descending. Each row shows: inspection date (`YYYY-MM-DD`), inspection type, and outcome. If no inspections exist, show "No inspection records found."
+- **Alterations section:** Total count of alteration records for that elevator. If the count is zero, show "No alterations on record."
+- **Incidents section:** Total count of incident records for that elevator. If the count is zero, show "No incidents on record."
+
+The panel remains visible until the user explicitly closes it. Clicking a different row while the panel is open replaces the panel content with the new elevator's data without closing and reopening the panel.
+
+#### 2. Scope Boundaries
+
+**In scope:**
+- Rendering the panel and all its sections as described above.
+- Updating the panel in place when a different row is clicked.
+- Closing the panel via a close button.
+- Highlighting the active row (the one whose data is currently shown in the panel).
+
+**Out of scope:**
+- Editing any field from within the panel.
+- Deep-linking to a specific elevator panel via URL.
+- Showing paginated inspection history (all inspection records are listed without pagination).
+- Closing the panel by clicking outside it or pressing Escape.
+
+#### 3. Constraints
+
+- The panel sits alongside the table in the main content area. The table does not resize or reflow when the panel opens or closes.
+- The panel has a fixed width of 384 px. On viewports narrower than 768 px the panel is not required to work; this is an internal desktop tool.
+- The panel does not affect filter, sort, or pagination state. Those interactions remain fully independent of the panel.
+- All inspection records for the elevator are shown in the panel without pagination.
+- Data sources for each section (resolved — see Prior Decisions): basic info and license data from the main fleet dataset; inspection history from `inspection.csv`; alteration count from `altered.json`; incident count from `incident.json`.
+
+#### 4. Prior Decisions
+
+- **Data source strategy:** Individual source files (`inspection.csv`, `incident.json`, `altered.json`) are used for the panel instead of `merged_elevator_data.csv`. The merged file is denormalized (one row per alteration, ~52 k rows) and contains only aggregated inspection data, making it unsuitable for listing individual inspection records or reliably counting incidents per elevator.
+- **Panel is independent of table state:** Changing filters, sorting, or paginating the table does not close or refresh the panel. The panel shows the last clicked elevator until the user explicitly closes it or clicks a different row.
+- **Active-row highlight via OOB swap:** When the server responds to a row click, it returns the panel content as the primary swap (into `#detail-panel`) and includes an out-of-band fragment tagged `hx-swap-oob="true"` that updates the table rows — removing the highlight from the previously active row and applying it to the newly clicked one. This keeps highlight state server-driven without requiring a separate JavaScript handler.
+
+#### 5. Task Breakdown
+
+1. Define the panel layout: header strip (Elevator ID, device type, status badge), then four stacked sections (Basic Info, Inspection History, Alterations, Incidents) each with a section label and its content.
+2. Define the trigger: clicking a table row opens the panel with that elevator's data. The click target is the full row, not a specific cell.
+3. Define the update behavior: if the panel is already open and the user clicks a different row, the panel content is replaced in place — the panel does not close and reopen.
+4. Define the close behavior: an ✕ button in the top-right corner of the panel closes it. The active-row highlight is removed when the panel closes.
+5. Define active-row highlighting: the row whose elevator is currently displayed in the panel gets a distinct left border accent. Only one row is highlighted at a time.
+6. Define the empty state for the panel target: before any row is clicked, the panel area is empty and takes no space in the layout.
+
+#### 6. Verification Criteria
+
+- Clicking any row opens the panel and displays correct data for that elevator across all five sections.
+- The inspection list is sorted newest-first.
+- Clicking a second row while the panel is open replaces the panel content without the panel closing or flickering.
+- The ✕ button closes the panel and removes the active-row highlight from the table.
+- After opening or closing the panel, the table's filter, sort, and pagination state are unchanged.
+- If an elevator has no inspection records, the Inspection History section shows "No inspection records found."
+- If an elevator has no alteration records, the Alterations section shows "No alterations on record."
+- If an elevator has no incident records, the Incidents section shows "No incidents on record."
+- Before any row is clicked, no panel is visible and the table occupies its full width.
+
+---
+
+### Interaction 2 — Filter and Search
+
+#### 1. Outcomes
+
+A search input is added to the filter bar above the table. As the user types, the table updates to show only elevators that match the query against **Elevator ID** (prefix match) or **Location** (case-insensitive substring match). The search operates simultaneously with the existing License Status dropdown and Expired button group — all active constraints apply together (AND logic). Clearing the search field returns the table to the state defined by the active dropdown and button filters alone. The table resets to page 1 on every search change.
+
+The rest of the dashboard responds as follows:
+- The summary cards (Total, Active, Expireds) are **not** affected by search — they always reflect the full fleet.
+- The "Showing X–Y of Z elevators" label updates to reflect the combined filter + search result count.
+- If the detail panel is open when the user types a search, the panel remains visible and unchanged — it shows the last clicked elevator regardless of whether that elevator is still in the filtered table.
+- The active sort column and direction are preserved across search changes.
+
+#### 2. Scope Boundaries
+
+**In scope:**
+- A single text search input matching against Elevator ID and Location.
+- AND combination with the existing License Status and Expired filters.
+- Resetting to page 1 on every new search query.
+- Preserving active sort column and direction while searching.
+- Updating the "Showing X–Y of Z" count to reflect combined results.
+- Empty-state message when no rows match.
+
+**Out of scope:**
+- Searching against any field other than Elevator ID and Location.
+- Fuzzy or phonetic matching.
+- Highlighting matched text within cells.
+- Search suggestions or autocomplete.
+- Saving or recalling recent searches.
+- Affecting the summary cards.
+
+#### 3. Constraints
+
+- The table updates after the user pauses typing, not on every keystroke. The debounce delay is 300 ms.
+- Elevator ID match rule: the query must be a prefix of the Elevator ID. For example, `"10"` matches IDs `10`, `100`, and `1001`, but not `210`.
+- Location match rule: case-insensitive substring match against the full untruncated location string (not the display-truncated version shown in the table).
+- An empty search query means no search constraint is active; only the dropdown and button filters apply.
+- Maximum search query length: 100 characters. Input beyond that length is ignored.
+- Search state is preserved when the user changes the License Status filter, the Expired filter, the sort column, or navigates between pages.
+
+#### 4. Prior Decisions
+
+- **AND logic for combined filters:** The most operationally useful default. A manager filtering for `ACTIVE` licenses and then typing a location substring expects both constraints to hold simultaneously — narrowing the result, not replacing it.
+- **Summary cards are excluded from search:** The cards represent fleet-wide KPIs. Filtering them by search query would make them contextual metrics, which is a different feature. They remain full-fleet aggregates.
+- **Panel independence from search:** The detail panel shows a specific elevator's record. Closing or refreshing the panel when the user searches would break the user's workflow (comparing an elevator's detail while scanning filtered results). The panel stays until the user explicitly closes it.
+- **State via query params** (established in Task 3): the search query travels as a param on every table request alongside filter and sort state, so that paginating or sorting preserves the active search.
+
+#### 5. Task Breakdown
+
+1. Define search input placement: positioned in the filter bar to the left of the existing License Status dropdown, spanning a fixed width that does not crowd the other controls.
+2. Define the match rules as specified in Constraints: prefix on Elevator ID, substring on Location.
+3. Define the combination logic: search is applied after the existing dropdown and button filters — rows must satisfy all active constraints simultaneously.
+4. Define the debounce: the table does not request new results until 300 ms after the user stops typing.
+5. Define page reset: any change to the search query resets the table to page 1.
+6. Define sort preservation: the active sort column and direction are carried unchanged when the search changes.
+7. Define the "Showing X–Y of Z" label: Z reflects the total count of rows matching the combined filter + search, not the full fleet count.
+8. Define the empty state: if the combined result set is zero rows, the table body shows the single centered message "No elevators match the selected filters." (same message used when filters alone produce zero results).
+
+#### 6. Verification Criteria
+
+- Typing `"10"` in the search box shows only elevators whose Elevator ID starts with `10` or whose full location string contains `"10"` (case-insensitive).
+- With License Status set to `ACTIVE` and search set to `"toronto"`, only `ACTIVE` elevators whose location contains `"toronto"` are shown.
+- Clearing the search field returns the table to the result set defined by the active dropdown and button filters alone.
+- The summary cards show the same values before and after searching.
+- The "Showing X–Y of Z" label reflects the combined filter + search count, not the total fleet count.
+- Active sort column and direction are unchanged after typing a search query.
+- The page resets to 1 when the search query changes.
+- Paginating through search results keeps the search query active.
+- When combined filter + search yields zero rows, the empty-state message appears.
+- If the detail panel is open while the user types a search, the panel remains visible and its content does not change.
+
+---
+
+### Interaction 3 — Sort Behavior
+
+#### 1. Outcomes
+
+Two table columns are sortable: **Elevator ID** and **Expiry Date**. The default state on every page load is Elevator ID ascending. Clicking a sortable column header sorts the table by that column; clicking the same header again reverses the direction. Switching to a different column always starts ascending. Only one column is sorted at a time.
+
+Every sortable column header displays a direction indicator at all times:
+- **↑** — this column is the active sort, ascending.
+- **↓** — this column is the active sort, descending.
+- **↕** — this column is sortable but not currently active.
+
+Non-sortable columns (Location, City, License Status, Expired) have no indicator and are not clickable for sorting.
+
+Sort state is preserved when the user changes the License Status filter, the Expired filter, the search query, or navigates between pages. The page resets to 1 whenever the sort column or direction changes.
+
+The rest of the dashboard responds as follows:
+- The summary cards are not affected by sort.
+- If the detail panel is open when the user changes the sort, the panel remains visible and unchanged.
+- The "Showing X–Y of Z" label updates to reflect the new page slice, but Z (total count) does not change from a sort alone.
+
+#### 2. Scope Boundaries
+
+**In scope:**
+- Sorting by Elevator ID (numeric) and Expiry Date (date).
+- Toggle ascending / descending by clicking the active column header.
+- Switching to a different column resets direction to ascending.
+- Visual indicators on all sortable column headers.
+- Sort preserved across filter, search, and pagination interactions.
+- Page reset to 1 on every sort change.
+
+**Out of scope:**
+- Multi-column sorting.
+- Sorting by Location, City, License Status, or Expired.
+- Persisting sort preference across browser sessions or page reloads.
+- Keyboard-triggered column sorting.
+
+#### 3. Constraints
+
+- Sort is always single-column. Activating a new column discards any previous sort.
+- Elevators with no expiry date sort last in both ascending and descending directions on the Expiry Date column.
+- Elevator ID is sorted numerically, not lexicographically (e.g., ID `9` sorts after `8`, not after `89`).
+- If `sort_by` or `sort_dir` are absent from a request, the table defaults to Elevator ID ascending.
+- Sort state is carried on every table request alongside filter, search, and pagination state so that no interaction silently resets it.
+
+#### 4. Prior Decisions
+
+- **Sortable columns limited to Elevator ID and Expiry Date** (established in Task 3): these are the two columns most relevant to the operations manager's core workflows — locating a specific elevator by ID and identifying licenses approaching expiry.
+- **Direction resets to ascending on column switch:** switching columns is a new sort intent, not a continuation of the previous one. Starting ascending is the natural reading direction and avoids surprising the user with a descending sort they did not ask for.
+- **Page resets to 1 on sort change:** the row ordering changes, making the current page offset meaningless. Staying on page 3 after a sort change would show a disorienting mid-set slice.
+- **State via query params** (established in Task 3): sort state travels as `sort_by` and `sort_dir` params on every request, keeping the server stateless and allowing any interaction to carry the full state forward.
+
+#### 5. Task Breakdown
+
+1. Define the default state: on page load with no explicit sort params, the table renders sorted by Elevator ID ascending, with ↑ on the Elevator ID header and ↕ on the Expiry Date header.
+2. Define the click behavior for the active column: if the user clicks the column already sorted, the direction toggles. The next request carries the same `sort_by` and the opposite `sort_dir`.
+3. Define the click behavior for an inactive sortable column: the next request carries the new `sort_by` and `sort_dir=asc`, regardless of the previous sort direction.
+4. Define null handling for Expiry Date: rows with no expiry date appear after all dated rows in both ascending and descending sorts.
+5. Define indicator rendering: each sortable header reads the current `sort_by` and `sort_dir` from the fragment state and renders the correct indicator (↑, ↓, or ↕).
+6. Define sort preservation: filter, search, and pagination requests must carry the current `sort_by` and `sort_dir` values so that sorting is not lost when the user changes another control.
+
+#### 6. Verification Criteria
+
+- On page load, the table is sorted by Elevator ID ascending and the Elevator ID header shows ↑; the Expiry Date header shows ↕.
+- Clicking the Elevator ID header while it shows ↑ re-sorts descending (↓) and reorders the rows.
+- Clicking the Expiry Date header while Elevator ID is active sorts by expiry date ascending, shows ↑ on Expiry Date and ↕ on Elevator ID.
+- Clicking the Expiry Date header again reverses to descending (↓).
+- Elevators with no expiry date appear last when sorted by Expiry Date in either direction.
+- Changing the License Status filter, the Expired filter, or the search query does not reset the sort column or direction.
+- Paginating does not reset the sort column or direction.
+- The page resets to 1 every time the sort column or direction changes.
+- Non-sortable column headers (Location, City, License Status, Expired) show no indicator and produce no sort on click.
+- If the detail panel is open when the sort changes, the panel remains visible and its content does not change.
+
