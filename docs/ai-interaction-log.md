@@ -203,6 +203,8 @@ What happened: For Merge 3 this was especially useful. The subagent confirmed th
 
 What I would change: I would do this for every merge from the start, not just when the relationship feels unclear. Merge 1's join key was obvious from column names, but running the exploration upfront costs almost nothing and prevents surprises mid-merge.
 
+
+
 ## AND-102 Task 6 — NLP Analysis (subagent to choose between LDA and K-Means)
 
 Prompt: Before choosing an NLP technique, I used a subagent to compare LDA topic modeling against TF-IDF + K-Means clustering for a dataset of short incident narratives with a median length of 12 words.
@@ -211,3 +213,11 @@ What happened: The subagent returned a clear recommendation for TF-IDF + K-Means
 
 What I would change: Nothing significant. Using a subagent for an open-ended research question before committing to an implementation approach is a pattern worth repeating. The cost of spawning the subagent is low and the output was directly usable as the justification paragraph in the notebook.
 
+
+## AND-103 Task 1 — Interaction Specification (scope assumption on detail panel)
+
+Prompt: "Write the interaction specification for the Elevator Detail Panel using the six SDD elements."
+
+What happened: The model wrote the Task Breakdown section with server implementation steps — specific endpoint names, DataFrame variable names, template filenames, and HTMX attribute strings. This went beyond what the task asked for. Task 1 only requires a design-level spec; the server implementation belongs to a later task. The section had to be rewritten to remove those details and keep the breakdown at the level of design decisions (what the panel shows, how it opens, how it updates, how it closes) rather than coding steps.
+
+What I would change: When a task says "write a spec," I should clarify the expected level of detail before writing. A spec describes behavior and design decisions; it does not prescribe how to implement them in code. Keeping scope explicit in the prompt — "do not include implementation steps" — would have prevented the mismatch.

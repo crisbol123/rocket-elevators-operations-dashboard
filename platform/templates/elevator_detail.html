@@ -1,0 +1,100 @@
+{# Detail panel fragment for GET /elevator/{id} — injected into #detail-panel via HTMX #}
+
+{# Header #}
+<div class="flex items-start justify-between px-5 py-4 border-b border-slate-200 bg-slate-50 rounded-t-xl">
+  <div>
+    <p class="font-mono text-2xl font-bold text-slate-800">#{{ elevator_id }}</p>
+    <p class="text-xs text-slate-500 mt-0.5">{{ device_type }}</p>
+  </div>
+  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+    {% if device_status == 'Active' %}bg-emerald-100 text-emerald-700
+    {% elif device_status == 'Inactive' %}bg-slate-100 text-slate-600
+    {% else %}bg-amber-100 text-amber-700{% endif %}">
+    {{ device_status }}
+  </span>
+</div>
+
+{# Basic Info #}
+<div class="px-5 py-4 border-b border-slate-200 space-y-2">
+  <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Basic Info</p>
+  <dl class="space-y-1 text-sm">
+    <div class="flex justify-between">
+      <dt class="text-slate-500">License</dt>
+      <dd class="font-mono text-slate-700">{{ license_number or '—' }}</dd>
+    </div>
+    <div class="flex justify-between">
+      <dt class="text-slate-500">License Status</dt>
+      <dd>
+        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+          {% if license_status == 'ACTIVE' %}bg-emerald-100 text-emerald-700
+          {% elif license_status == 'PENDING_RENEWAL' %}bg-amber-100 text-amber-700
+          {% else %}bg-slate-100 text-slate-600{% endif %}">
+          {{ license_status or '—' }}
+        </span>
+      </dd>
+    </div>
+    <div class="flex justify-between">
+      <dt class="text-slate-500">Expiry Date</dt>
+      <dd class="font-mono text-xs text-slate-700">{{ license_expiry_date or '—' }}</dd>
+    </div>
+    <div class="flex gap-4">
+      <dt class="text-slate-500 shrink-0">Location</dt>
+      <dd class="text-slate-700 text-right">{{ location or '—' }}</dd>
+    </div>
+  </dl>
+</div>
+
+{# Inspection History #}
+<div class="px-5 py-4 border-b border-slate-200">
+  <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Inspection History</p>
+  {% if inspections %}
+  <table class="w-full text-xs">
+    <thead>
+      <tr class="text-slate-400 border-b border-slate-100">
+        <th class="pb-1 text-left font-medium">Date</th>
+        <th class="pb-1 text-left font-medium">Type</th>
+        <th class="pb-1 text-left font-medium">Outcome</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for insp in inspections %}
+      <tr class="border-b border-slate-50">
+        <td class="py-1 font-mono text-slate-500">{{ insp.date }}</td>
+        <td class="py-1 text-slate-600">{{ insp.type }}</td>
+        <td class="py-1">
+          {% if insp.outcome == 'Passed' %}
+          <span class="text-emerald-600 font-medium">Passed</span>
+          {% elif 'Follow up' in insp.outcome %}
+          <span class="text-amber-600 font-medium">{{ insp.outcome }}</span>
+          {% else %}
+          <span class="text-slate-600">{{ insp.outcome }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-sm text-slate-400">No inspection records found.</p>
+  {% endif %}
+</div>
+
+{# Alterations #}
+<div class="px-5 py-4 border-b border-slate-200">
+  <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Alterations</p>
+  {% if alteration_count > 0 %}
+  <p class="text-sm text-slate-700">{{ alteration_count }} alteration record{{ 's' if alteration_count != 1 }}</p>
+  {% else %}
+  <p class="text-sm text-slate-400">No alterations on record.</p>
+  {% endif %}
+</div>
+
+{# Incidents #}
+<div class="px-5 py-4">
+  <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Incidents</p>
+  {% if incident_count > 0 %}
+  <p class="text-sm text-slate-700">{{ incident_count }} incident record{{ 's' if incident_count != 1 }}</p>
+  {% else %}
+  <p class="text-sm text-slate-400">No incidents on record.</p>
+  {% endif %}
+</div>
