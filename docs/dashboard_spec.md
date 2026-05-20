@@ -80,11 +80,11 @@ Provide three summary cards in a single horizontal row. Each card includes a lab
 - **Definition**: Count of all elevators in the dataset.
 - **Calculation**: Count of distinct rows in `installed.json` (each row is one device). Do not deduplicate further; the file already has one record per device.
 
-### Card 2 — Active Elevators
+### Card 2 — Active Licenses
 
-- **Label**: "Active Elevators"
-- **Definition**: Count of elevators currently in active service.
-- **Calculation**: Count rows from `installed.json` where `DeviceStatus` equals `"Active"` (case-insensitive comparison).
+- **Label**: "Active Licenses"
+- **Definition**: Count of elevators with an active license.
+- **Calculation**: Count rows in the fleet dataset where `license_status` equals `"ACTIVE"`.
 
 ### Card 3 — Expireds
 
@@ -107,7 +107,8 @@ The table must allow the manager to look up any elevator and see its key details
 | City | Text after the double space separator, before the postal code. Convert to title case. Example: `Toronto` |
 | License Status | Exact value as stored; do not translate or normalize values |
 | License Expiry Date | `YYYY-MM-DD` |
-| Expired | "Yes" if `license_expiry_date` is earlier than today; "No" otherwise |
+| License Valid | "Yes" badge (green) if `license_expiry_date` is today or in the future; "No" badge (red) if earlier than today |
+| Insp. Status | "Overdue" badge (amber) if the elevator's last inspection date is more than 12 months before today; "OK" badge (green) otherwise |
 
 **Date parsing:**
 - `LICENSEEXPIRYDATE` in `license.csv` is stored as `DD-MMM-YY`. Two-digit years: treat 00–29 as 2000–2029 and 30–99 as 1930–1999.
@@ -130,10 +131,13 @@ The table must allow the manager to look up any elevator and see its key details
 
 All filters render inside the table fragment above the table. A filter change resets the page to 1 and returns a new fragment. Filter state is preserved across sort and pagination interactions.
 
-| Filter | Type | Options |
-|---|---|---|
-| License Status | Dropdown | All Statuses / Active (`ACTIVE`) / Pending Renewal (`PENDING_RENEWAL`) |
-| Expired | Button group | All / Valid (not expired) / Expired (expiry date < today) |
+Filters are grouped with a visible label indicating which column each group controls:
+
+| Group label | Filter | Type | Options |
+|---|---|---|---|
+| License: | License Status | Dropdown | All Statuses / Active (`ACTIVE`) / Pending Renewal (`PENDING_RENEWAL`) |
+| License: | License Valid | Button group | All / Valid (not expired) / Expired (expiry date < today) |
+| Inspection: | Insp. Status | Button group | All / OK (last inspection ≤ 12 months ago) / Overdue (last inspection > 12 months ago) |
 
 ### Sorting
 
@@ -146,7 +150,7 @@ Sortable columns are clickable headers. Clicking a column sorts ascending; click
 
 ### State Management
 
-All interactive state (`status`, `expired`, `sort_by`, `sort_dir`, `page`) is carried as query parameters on every request to `GET /fragments/table`. No client-side JavaScript manages state. Hidden `<input>` elements inside the fragment hold current values; `hx-include` collects them on each interaction; `hx-vals` overrides only the value being changed. The server always receives the full state and returns a fully rendered fragment.
+All interactive state (license status, license valid, inspection status, sort column, sort direction, and current page) is preserved across every interaction. Changing a filter does not reset the sort; changing the sort does not reset the filters; paginating preserves both. The server always receives the complete current state and returns a fully rendered fragment reflecting it.
 
 ---
 
@@ -264,7 +268,10 @@ When a user clicks any row in the elevator table, a detail panel slides in from 
 
 - **Header:** Elevator ID (monospace, large), device type, and current status badge.
 - **Basic info section:** License number, license status badge, license expiry date, location (full untruncated string).
-- **Inspection history section:** A list of all inspections for that elevator, sorted by date descending. Each row shows: inspection date (`YYYY-MM-DD`), inspection type, and outcome. If no inspections exist, show "No inspection records found."
+- **Inspection history section:** A list of all inspections for that elevator, sorted by date descending. Each row shows: inspection date (`YYYY-MM-DD`), inspection type, and outcome rendered as a colored badge using the following classification:
+  - **Green:** outcome contains the word `Pass`, `Complete`, or `All Orders`; or outcome is exactly `Not Required` or `Temp Lic Not Needed`.
+  - **Red:** outcome contains the word `Fail`; or outcome is exactly `Shutdown` or `Vol Shut Down`.
+  - **Amber:** all other outcomes. If no inspections exist, show "No inspection records found." If the elevator's last inspection was more than 12 months before today, an "⚠ Overdue" badge appears next to the section title.
 - **Alterations section:** Total count of alteration records for that elevator. If the count is zero, show "No alterations on record."
 - **Incidents section:** Total count of incident records for that elevator. If the count is zero, show "No incidents on record."
 
@@ -296,7 +303,7 @@ The panel remains visible until the user explicitly closes it. Clicking a differ
 
 - **Data source strategy:** Individual source files (`inspection.csv`, `incident.json`, `altered.json`) are used for the panel instead of `merged_elevator_data.csv`. The merged file is denormalized (one row per alteration, ~52 k rows) and contains only aggregated inspection data, making it unsuitable for listing individual inspection records or reliably counting incidents per elevator.
 - **Panel is independent of table state:** Changing filters, sorting, or paginating the table does not close or refresh the panel. The panel shows the last clicked elevator until the user explicitly closes it or clicks a different row.
-- **Active-row highlight via OOB swap:** When the server responds to a row click, it returns the panel content as the primary swap (into `#detail-panel`) and includes an out-of-band fragment tagged `hx-swap-oob="true"` that updates the table rows — removing the highlight from the previously active row and applying it to the newly clicked one. This keeps highlight state server-driven without requiring a separate JavaScript handler.
+- **Active-row highlight is client-driven:** The highlight is applied immediately on click via a delegated click listener on the table body — no server round-trip is needed. When the user clicks a row, the listener removes the highlight from any previously active row and applies it to the clicked one. When the panel is closed, the listener clears all highlights. This approach was chosen over a server-driven OOB swap because the highlight is purely visual feedback that does not depend on server state.
 
 #### 5. Task Breakdown
 
@@ -325,10 +332,10 @@ The panel remains visible until the user explicitly closes it. Clicking a differ
 
 #### 1. Outcomes
 
-A search input is added to the filter bar above the table. As the user types, the table updates to show only elevators that match the query against **Elevator ID** (prefix match) or **Location** (case-insensitive substring match). The search operates simultaneously with the existing License Status dropdown and Expired button group — all active constraints apply together (AND logic). Clearing the search field returns the table to the state defined by the active dropdown and button filters alone. The table resets to page 1 on every search change.
+Two separate search inputs are added to the top-right corner of the table section header: one for Elevator ID and one for Location. As the user types in either input, the table updates to show only elevators that match — Elevator ID by prefix match, Location by case-insensitive substring match. Both inputs are active simultaneously; a row must satisfy all non-empty inputs and all active filters (License Status, License Valid, Insp. Status) to appear (AND logic). Clearing an input removes that constraint. The table resets to page 1 on every change to either input.
 
 The rest of the dashboard responds as follows:
-- The summary cards (Total, Active, Expireds) are **not** affected by search — they always reflect the full fleet.
+- The summary cards (Total, Active Licenses, Expired) update to reflect the count within the current combined filter + search result set, not the full fleet. This update is delivered as an out-of-band swap in the same server response as the table fragment.
 - The "Showing X–Y of Z elevators" label updates to reflect the combined filter + search result count.
 - If the detail panel is open when the user types a search, the panel remains visible and unchanged — it shows the last clicked elevator regardless of whether that elevator is still in the filtered table.
 - The active sort column and direction are preserved across search changes.
@@ -336,8 +343,8 @@ The rest of the dashboard responds as follows:
 #### 2. Scope Boundaries
 
 **In scope:**
-- A single text search input matching against Elevator ID and Location.
-- AND combination with the existing License Status and Expired filters.
+- Two separate text search inputs: one matching Elevator ID (prefix) and one matching Location (substring).
+- AND combination with all active filters (License Status, License Valid, Insp. Status).
 - Resetting to page 1 on every new search query.
 - Preserving active sort column and direction while searching.
 - Updating the "Showing X–Y of Z" count to reflect combined results.
@@ -349,7 +356,6 @@ The rest of the dashboard responds as follows:
 - Highlighting matched text within cells.
 - Search suggestions or autocomplete.
 - Saving or recalling recent searches.
-- Affecting the summary cards.
 
 #### 3. Constraints
 
@@ -363,13 +369,14 @@ The rest of the dashboard responds as follows:
 #### 4. Prior Decisions
 
 - **AND logic for combined filters:** The most operationally useful default. A manager filtering for `ACTIVE` licenses and then typing a location substring expects both constraints to hold simultaneously — narrowing the result, not replacing it.
-- **Summary cards are excluded from search:** The cards represent fleet-wide KPIs. Filtering them by search query would make them contextual metrics, which is a different feature. They remain full-fleet aggregates.
+- **Summary cards update with filter and search state:** The cards reflect the result count of the currently active filter + search combination, not the full fleet. Each table response includes the updated card values as out-of-band swaps so the cards stay in sync with what the table is showing without a separate request.
 - **Panel independence from search:** The detail panel shows a specific elevator's record. Closing or refreshing the panel when the user searches would break the user's workflow (comparing an elevator's detail while scanning filtered results). The panel stays until the user explicitly closes it.
 - **State via query params** (established in Task 3): the search query travels as a param on every table request alongside filter and sort state, so that paginating or sorting preserves the active search.
+- **Search inputs live outside the swappable fragment:** The search inputs must not be part of the table fragment that the server returns on each request. If they were, every keystroke would destroy and recreate the input element, causing the user to lose focus mid-typing. Both inputs are placed in the static page shell so they persist across all table updates.
 
 #### 5. Task Breakdown
 
-1. Define search input placement: positioned in the filter bar to the left of the existing License Status dropdown, spanning a fixed width that does not crowd the other controls.
+1. Define search input placement: two side-by-side inputs in the top-right corner of the table section header, visually separated from the filter bar below it. The first input targets Elevator ID (placeholder "Elevator ID…"); the second targets Location (placeholder "Location…").
 2. Define the match rules as specified in Constraints: prefix on Elevator ID, substring on Location.
 3. Define the combination logic: search is applied after the existing dropdown and button filters — rows must satisfy all active constraints simultaneously.
 4. Define the debounce: the table does not request new results until 300 ms after the user stops typing.
@@ -380,10 +387,10 @@ The rest of the dashboard responds as follows:
 
 #### 6. Verification Criteria
 
-- Typing `"10"` in the search box shows only elevators whose Elevator ID starts with `10` or whose full location string contains `"10"` (case-insensitive).
-- With License Status set to `ACTIVE` and search set to `"toronto"`, only `ACTIVE` elevators whose location contains `"toronto"` are shown.
+- Typing `"10"` in the Elevator ID input shows only elevators whose ID starts with `10`. Typing `"toronto"` in the Location input shows only elevators whose full location string contains `"toronto"` (case-insensitive).
+- With License Status set to `ACTIVE` and the Location input set to `"toronto"`, only `ACTIVE` elevators whose location contains `"toronto"` are shown.
 - Clearing the search field returns the table to the result set defined by the active dropdown and button filters alone.
-- The summary cards show the same values before and after searching.
+- The summary cards update to reflect the count within the active filter + search result set after every table interaction.
 - The "Showing X–Y of Z" label reflects the combined filter + search count, not the total fleet count.
 - Active sort column and direction are unchanged after typing a search query.
 - The page resets to 1 when the search query changes.
@@ -404,7 +411,7 @@ Every sortable column header displays a direction indicator at all times:
 - **↓** — this column is the active sort, descending.
 - **↕** — this column is sortable but not currently active.
 
-Non-sortable columns (Location, City, License Status, Expired) have no indicator and are not clickable for sorting.
+Non-sortable columns (Location, City, License Status, License Valid, Insp. Status) have no indicator and are not clickable for sorting.
 
 Sort state is preserved when the user changes the License Status filter, the Expired filter, the search query, or navigates between pages. The page resets to 1 whenever the sort column or direction changes.
 
@@ -425,7 +432,7 @@ The rest of the dashboard responds as follows:
 
 **Out of scope:**
 - Multi-column sorting.
-- Sorting by Location, City, License Status, or Expired.
+- Sorting by Location, City, License Status, License Valid, or Insp. Status.
 - Persisting sort preference across browser sessions or page reloads.
 - Keyboard-triggered column sorting.
 
@@ -463,6 +470,38 @@ The rest of the dashboard responds as follows:
 - Changing the License Status filter, the Expired filter, or the search query does not reset the sort column or direction.
 - Paginating does not reset the sort column or direction.
 - The page resets to 1 every time the sort column or direction changes.
-- Non-sortable column headers (Location, City, License Status, Expired) show no indicator and produce no sort on click.
+- Non-sortable column headers (Location, City, License Status, License Valid, Insp. Status) show no indicator and produce no sort on click.
 - If the detail panel is open when the sort changes, the panel remains visible and its content does not change.
+
+---
+
+### Interaction 4 — Loading Indicator
+
+#### 1. Outcomes
+
+A spinner icon appears in the table section header whenever a table request is in flight (any request whose response targets `#table-wrap`). The spinner is hidden when no request is active. It is also hidden on page load before the initial table request completes.
+
+#### 2. Scope Boundaries
+
+**In scope:**
+- Showing the spinner while a table fragment request is in flight.
+- Hiding the spinner as soon as the response is received.
+
+**Out of scope:**
+- Showing a spinner for the detail panel request.
+- Blocking or disabling filters or search inputs while the spinner is visible.
+- A progress bar or percentage indicator.
+
+#### 3. Constraints
+
+- The spinner does not affect layout — it occupies a fixed position in the table header row alongside the search inputs and does not shift other elements.
+- The spinner fades in and out with a 200 ms opacity transition to avoid a jarring flash on fast responses.
+- The spinner is driven by JavaScript event listeners (`htmx:beforeRequest` / `htmx:afterRequest`) rather than HTMX's built-in indicator class, because the Tailwind CDN overrides the default `.htmx-indicator` CSS.
+
+#### 4. Verification Criteria
+
+- The spinner is not visible on initial page load before the first table response arrives.
+- The spinner becomes visible when any table filter, search, sort, or pagination interaction triggers a request.
+- The spinner disappears when the response is received and the table updates.
+- The spinner does not appear when clicking a table row to open the detail panel.
 
