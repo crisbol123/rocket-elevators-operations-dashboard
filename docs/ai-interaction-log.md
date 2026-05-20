@@ -214,6 +214,33 @@ What happened: The subagent returned a clear recommendation for TF-IDF + K-Means
 What I would change: Nothing significant. Using a subagent for an open-ended research question before committing to an implementation approach is a pattern worth repeating. The cost of spawning the subagent is low and the output was directly usable as the justification paragraph in the notebook.
 
 
+## AND-103 Task 3 — Search input placement (element destroyed on every swap)
+
+Prompt: Implement the search input with debounced requests so the table updates as the user types, but not on every keystroke.
+
+What happened: The search input was placed inside the table fragment — the same HTML block that the server replaces on every filter or search request. This meant that every time the user typed a character, HTMX destroyed the input element and recreated it with the new fragment, causing the user to lose focus after each keystroke. The user had to click back into the search box after every character typed. The fix was to move the input to the static page shell (index.html), outside of the swappable fragment. Since the input is never replaced, focus is preserved across all table updates.
+
+What I would change: Before placing any interactive element inside a server-rendered fragment, I should ask whether that element triggers the swap that replaces it. If yes, it must live outside the fragment. This is a predictable consequence of HTMX's swap model and should be caught at design time, not discovered through user testing.
+
+
+## AND-103 Task 3 — Inspection outcome badges (business knowledge required for color classification)
+
+Prompt: Implement inspection outcome badges with distinct colors for different outcomes using the actual values in the data.
+
+What happened: The model proposed a three-color classification (green / yellow / red) and offered to implement it immediately. Left to its own judgment, it would have used a simple pattern — "Pass" → green, "Fail" → red, everything else → yellow. That would have misclassified Shutdown and Vol Shut Down as yellow (they are serious interventions, not neutral states) and Not Required and Temp Lic Not Needed as yellow (they indicate no issue existed, not an unresolved one). The model surfaced the ambiguous cases before implementing and asked for explicit decisions on each. The user resolved them: shutdowns go red, not-required outcomes go green, Extend Time to Comply stays yellow. Only after those decisions was the implementation written.
+
+What I would change: The model should not assume it can classify domain-specific outcome values without input. For any field where the label alone does not clearly indicate severity or resolution status, the right move is to present the ambiguous cases and ask before writing code. Implementing first and correcting later would have produced wrong visual feedback in a real operations tool.
+
+
+## AND-103 Task 3 — Overdue inspection indicator (gap discovered during implementation)
+
+Prompt: Implement the overdue inspection highlight for elevators whose last inspection was more than 12 months ago.
+
+What happened: The interaction spec written in Task 1 did not include the overdue inspection indicator at all — neither the "Insp. Status" column in the table nor the "⚠ Overdue" badge in the detail panel. These features were only discovered as missing when implementing Task 3. The spec had to be updated mid-implementation to add the column definition, the filter group, and the overdue behavior in the panel. This is exactly the pattern the task describes: a gap found during implementation that requires a spec update.
+
+What I would change: The Task 1 spec should have included the overdue inspection indicator as part of the table design, since the task description explicitly called for it. The omission happened because the spec focused on the detail panel interaction and did not revisit the table columns to check for missing visual indicators. A final review of the table column list against the full task requirements before closing the spec would have caught this.
+
+
 ## AND-103 Task 1 — Interaction Specification (scope assumption on detail panel)
 
 Prompt: "Write the interaction specification for the Elevator Detail Panel using the six SDD elements."

@@ -1,5 +1,6 @@
 {# Hidden state — picked up by hx-include in every interaction #}
 <input type="hidden" name="expired" value="{{ expired }}">
+<input type="hidden" name="inspection" value="{{ inspection }}">
 <input type="hidden" name="sort_by" value="{{ sort_by }}">
 <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
 
@@ -7,12 +8,14 @@
 <div class="px-5 py-3 border-b border-slate-200 flex flex-wrap items-center gap-3 bg-white">
   <span class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Filter</span>
 
-  <!-- License Status dropdown -->
+  <!-- License group -->
+  <span class="text-xs font-medium text-slate-500">License:</span>
+
   <select name="status"
           hx-get="/fragments/table"
           hx-target="#table-wrap"
           hx-swap="innerHTML"
-          hx-include="[name='expired'],[name='sort_by'],[name='sort_dir']"
+          hx-include="[name='search_id'],[name='search_location'],[name='expired'],[name='inspection'],[name='sort_by'],[name='sort_dir']"
           hx-vals='{"page": "1"}'
           class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4DA3FF] cursor-pointer">
     <option value="all" {{ 'selected' if status == 'all' }}>All Statuses</option>
@@ -20,18 +23,34 @@
     <option value="PENDING_RENEWAL" {{ 'selected' if status == 'PENDING_RENEWAL' }}>Pending Renewal</option>
   </select>
 
-  <div class="w-px h-4 bg-slate-200"></div>
-
-  <!-- Expired buttons -->
   <div class="flex gap-1">
     {% for val, label in [('all', 'All'), ('no', 'Valid'), ('yes', 'Expired')] %}
     <button
       hx-get="/fragments/table"
       hx-target="#table-wrap"
       hx-swap="innerHTML"
-      hx-include="[name='status'],[name='sort_by'],[name='sort_dir']"
+      hx-include="[name='search_id'],[name='search_location'],[name='status'],[name='inspection'],[name='sort_by'],[name='sort_dir']"
       hx-vals='{"expired": "{{ val }}", "page": "1"}'
       class="{{ 'bg-[#1E2430] text-white border-[#1E2430]' if expired == val else 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' }} rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer">
+      {{ label }}
+    </button>
+    {% endfor %}
+  </div>
+
+  <div class="w-px h-4 bg-slate-200"></div>
+
+  <!-- Inspection group -->
+  <span class="text-xs font-medium text-slate-500">Inspection:</span>
+
+  <div class="flex gap-1">
+    {% for val, label in [('all', 'All'), ('ok', 'OK'), ('overdue', 'Overdue')] %}
+    <button
+      hx-get="/fragments/table"
+      hx-target="#table-wrap"
+      hx-swap="innerHTML"
+      hx-include="[name='search_id'],[name='search_location'],[name='status'],[name='expired'],[name='sort_by'],[name='sort_dir']"
+      hx-vals='{"inspection": "{{ val }}", "page": "1"}'
+      class="{{ 'bg-[#1E2430] text-white border-[#1E2430]' if inspection == val else 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' }} rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer">
       {{ label }}
     </button>
     {% endfor %}
@@ -52,7 +71,7 @@
             hx-get="/fragments/table"
             hx-target="#table-wrap"
             hx-swap="innerHTML"
-            hx-include="[name='status'],[name='expired']"
+            hx-include="[name='search_id'],[name='search_location'],[name='status'],[name='expired'],[name='inspection']"
             hx-vals='{"sort_by": "elevator_id", "sort_dir": "{{ id_next }}", "page": "1"}'>
           Elevator ID
           <span class="ml-1 opacity-50 text-xs">{{ '↑' if sort_by == 'elevator_id' and sort_dir == 'asc' else ('↓' if sort_by == 'elevator_id' else '↕') }}</span>
@@ -64,17 +83,24 @@
             hx-get="/fragments/table"
             hx-target="#table-wrap"
             hx-swap="innerHTML"
-            hx-include="[name='status'],[name='expired']"
+            hx-include="[name='search_id'],[name='search_location'],[name='status'],[name='expired'],[name='inspection']"
             hx-vals='{"sort_by": "license_expiry_date", "sort_dir": "{{ exp_next }}", "page": "1"}'>
           Expiry Date
           <span class="ml-1 opacity-50 text-xs">{{ '↑' if sort_by == 'license_expiry_date' and sort_dir == 'asc' else ('↓' if sort_by == 'license_expiry_date' else '↕') }}</span>
         </th>
-        <th class="px-5 py-3 font-semibold w-24">Expired</th>
+        <th class="px-5 py-3 font-semibold w-24">License Valid</th>
+        <th class="px-5 py-3 font-semibold w-32">Insp. Status</th>
       </tr>
     </thead>
     <tbody>
       {% for row in rows %}
-      <tr class="border-b border-slate-100 hover:bg-blue-50/30 transition-colors {{ 'bg-white' if loop.index0 % 2 == 0 else 'bg-slate-50/50' }}" style="font-size:0.875rem">
+      <tr class="border-b border-slate-100 hover:bg-blue-50/30 transition-colors cursor-pointer {{ 'bg-white' if loop.index0 % 2 == 0 else 'bg-slate-50/50' }}"
+          id="row-{{ row.elevator_id }}"
+          data-elevator-id="{{ row.elevator_id }}"
+          hx-get="/elevator/{{ row.elevator_id }}"
+          hx-target="#detail-panel"
+          hx-swap="innerHTML"
+          style="font-size:0.875rem">
         <td class="px-5 py-3 font-mono text-slate-500">{{ row.elevator_id }}</td>
         <td class="px-5 py-3 text-slate-700">{{ row.location }}</td>
         <td class="px-5 py-3 text-slate-600">{{ row.city }}</td>
@@ -93,6 +119,13 @@
           <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">Yes</span>
           {% else %}
           <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">No</span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3">
+          {% if row.is_overdue %}
+          <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">Overdue</span>
+          {% else %}
+          <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">OK</span>
           {% endif %}
         </td>
       </tr>
@@ -114,7 +147,7 @@
       hx-get="/fragments/table"
       hx-target="#table-wrap"
       hx-swap="innerHTML"
-      hx-include="[name='status'],[name='expired'],[name='sort_by'],[name='sort_dir']"
+      hx-include="[name='search_id'],[name='search_location'],[name='status'],[name='expired'],[name='inspection'],[name='sort_by'],[name='sort_dir']"
       hx-vals='{"page": "{{ page - 1 }}"}'
       class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
       {{ 'disabled' if page == 1 else '' }}>
@@ -125,7 +158,7 @@
       hx-get="/fragments/table"
       hx-target="#table-wrap"
       hx-swap="innerHTML"
-      hx-include="[name='status'],[name='expired'],[name='sort_by'],[name='sort_dir']"
+      hx-include="[name='search_id'],[name='search_location'],[name='status'],[name='expired'],[name='inspection'],[name='sort_by'],[name='sort_dir']"
       hx-vals='{"page": "{{ page + 1 }}"}'
       class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
       {{ 'disabled' if page == total_pages else '' }}>
@@ -133,3 +166,8 @@
     </button>
   </div>
 </div>
+
+{# OOB card updates — update summary cards to reflect current filter/search state #}
+<div id="card-total" class="mt-2 text-3xl font-bold text-slate-900" hx-swap-oob="true">{{ card_total }}</div>
+<div id="card-active" class="mt-2 text-3xl font-bold text-emerald-600" hx-swap-oob="true">{{ card_active }}</div>
+<div id="card-expired" class="mt-2 text-3xl font-bold text-red-600" hx-swap-oob="true">{{ card_expired }}</div>

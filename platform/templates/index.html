@@ -56,40 +56,123 @@
 
       <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm border-t-4 border-t-[#4DA3FF]">
         <div class="text-xs uppercase tracking-wide text-slate-500">Total Elevators</div>
-        <div class="mt-2 text-3xl font-bold text-slate-900">{{ total }}</div>
+        <div id="card-total" class="mt-2 text-3xl font-bold text-slate-900">{{ total }}</div>
         <div class="mt-1 text-xs text-slate-400">All registered devices</div>
       </div>
 
       <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm border-t-4 border-t-emerald-500">
         <div class="text-xs uppercase tracking-wide text-slate-500">Active Licenses</div>
-        <div class="mt-2 text-3xl font-bold text-emerald-600">{{ active }}</div>
+        <div id="card-active" class="mt-2 text-3xl font-bold text-emerald-600">{{ active }}</div>
         <div class="mt-1 text-xs text-slate-400">Status: ACTIVE</div>
       </div>
 
       <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm border-t-4 border-t-red-500">
         <div class="text-xs uppercase tracking-wide text-slate-500">Expired Licenses</div>
-        <div class="mt-2 text-3xl font-bold text-red-600">{{ expired }}</div>
+        <div id="card-expired" class="mt-2 text-3xl font-bold text-red-600">{{ expired }}</div>
         <div class="mt-1 text-xs text-slate-400">Expiry date past today</div>
       </div>
 
     </div>
 
-    <!-- Table section -->
-    <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div class="border-b border-slate-200 px-5 py-4 flex items-center justify-between">
-        <div>
-          <div class="text-sm font-semibold text-slate-800">Elevator Fleet</div>
-          <div class="text-xs text-slate-400 mt-0.5">{{ total }} elevators · ACTIVE and PENDING RENEWAL licenses</div>
+    <!-- Table + Panel -->
+    <div class="flex gap-5 items-start">
+
+      <!-- Table section -->
+      <div class="flex-1 min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-200 px-5 py-4 flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold text-slate-800">Elevator Fleet</div>
+            <div class="text-xs text-slate-400 mt-0.5">{{ total }} elevators · ACTIVE and PENDING RENEWAL licenses</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <svg id="table-spinner"
+                 class="animate-spin w-4 h-4 text-[#4DA3FF] shrink-0"
+                 style="opacity:0; transition: opacity 200ms ease-in;"
+                 fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            <input type="text"
+                   id="search-id-input"
+                   name="search_id"
+                   placeholder="Elevator ID…"
+                   maxlength="100"
+                   hx-get="/fragments/table"
+                   hx-target="#table-wrap"
+                   hx-swap="innerHTML"
+                   hx-trigger="input changed delay:300ms"
+                   hx-indicator="#table-spinner"
+                   hx-include="[name='search_location'],[name='status'],[name='expired'],[name='inspection'],[name='sort_by'],[name='sort_dir']"
+                   hx-vals='{"page": "1"}'
+                   class="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4DA3FF] focus:bg-white focus:border-[#4DA3FF] transition-colors w-32">
+            <input type="text"
+                   id="search-location-input"
+                   name="search_location"
+                   placeholder="Location…"
+                   maxlength="100"
+                   hx-get="/fragments/table"
+                   hx-target="#table-wrap"
+                   hx-swap="innerHTML"
+                   hx-trigger="input changed delay:300ms"
+                   hx-indicator="#table-spinner"
+                   hx-include="[name='search_id'],[name='status'],[name='expired'],[name='inspection'],[name='sort_by'],[name='sort_dir']"
+                   hx-vals='{"page": "1"}'
+                   class="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#4DA3FF] focus:bg-white focus:border-[#4DA3FF] transition-colors w-36">
+          </div>
+        </div>
+        <div id="table-wrap"
+             hx-get="/fragments/table?page=1"
+             hx-indicator="#table-spinner"
+             hx-trigger="load">
+          <div class="px-5 py-8 text-sm text-slate-400 text-center">Loading fleet data…</div>
         </div>
       </div>
-      <div id="table-wrap"
-           hx-get="/fragments/table?page=1"
-           hx-trigger="load">
-        <div class="px-5 py-8 text-sm text-slate-400 text-center">Loading fleet data…</div>
+
+      <!-- Detail panel — hidden until a row is clicked -->
+      <div id="detail-panel"
+           class="w-96 shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-y-auto sticky top-8"
+           style="display:none; max-height:calc(100vh - 4rem)">
       </div>
+
     </div>
 
   </main>
+
+  <script>
+    function clearRowHighlight() {
+      document.querySelectorAll('tr[data-elevator-id]').forEach(function (tr) {
+        tr.style.boxShadow = '';
+        tr.style.backgroundColor = '';
+      });
+    }
+
+    // Highlight the clicked row immediately on click
+    document.body.addEventListener('click', function (e) {
+      var tr = e.target.closest('tr[data-elevator-id]');
+      if (!tr) return;
+      clearRowHighlight();
+      tr.style.boxShadow = 'inset 4px 0 0 #4DA3FF';
+      tr.style.backgroundColor = '#eff6ff';
+    });
+
+    // Loading spinner for table requests
+    var spinner = document.getElementById('table-spinner');
+    htmx.on('htmx:beforeRequest', function (evt) {
+      if (evt.detail.target.id === 'table-wrap') spinner.style.opacity = '1';
+    });
+    htmx.on('htmx:afterRequest', function (evt) {
+      if (evt.detail.target.id === 'table-wrap') spinner.style.opacity = '0';
+    });
+
+    // Show/hide the panel after HTMX swaps content into it
+    htmx.on('htmx:afterSwap', function (evt) {
+      if (evt.detail.target.id !== 'detail-panel') return;
+      var panel = evt.detail.target;
+      var hasContent = panel.innerHTML.trim().length > 0;
+      panel.style.display = hasContent ? '' : 'none';
+      if (!hasContent) clearRowHighlight();
+    });
+  </script>
 </div>
 </body>
 </html>

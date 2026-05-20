@@ -6,12 +6,20 @@
     <p class="font-mono text-2xl font-bold text-slate-800">#{{ elevator_id }}</p>
     <p class="text-xs text-slate-500 mt-0.5">{{ device_type }}</p>
   </div>
-  <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
-    {% if device_status == 'Active' %}bg-emerald-100 text-emerald-700
-    {% elif device_status == 'Inactive' %}bg-slate-100 text-slate-600
-    {% else %}bg-amber-100 text-amber-700{% endif %}">
-    {{ device_status }}
-  </span>
+  <div class="flex items-center gap-2 shrink-0">
+    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+      {% if device_status == 'Active' %}bg-emerald-100 text-emerald-700
+      {% elif device_status == 'Inactive' %}bg-slate-100 text-slate-600
+      {% else %}bg-amber-100 text-amber-700{% endif %}">
+      {{ device_status }}
+    </span>
+    <button
+      hx-get="/fragments/close"
+      hx-target="#detail-panel"
+      hx-swap="innerHTML"
+      class="rounded-full p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer leading-none"
+      aria-label="Close panel">✕</button>
+  </div>
 </div>
 
 {# Basic Info #}
@@ -46,7 +54,12 @@
 
 {# Inspection History #}
 <div class="px-5 py-4 border-b border-slate-200">
-  <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Inspection History</p>
+  <div class="flex items-center justify-between mb-2">
+    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Inspection History</p>
+    {% if is_overdue %}
+    <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">⚠ Overdue</span>
+    {% endif %}
+  </div>
   {% if inspections %}
   <table class="w-full text-xs">
     <thead>
@@ -62,12 +75,12 @@
         <td class="py-1 font-mono text-slate-500">{{ insp.date }}</td>
         <td class="py-1 text-slate-600">{{ insp.type }}</td>
         <td class="py-1">
-          {% if insp.outcome == 'Passed' %}
-          <span class="text-emerald-600 font-medium">Passed</span>
-          {% elif 'Follow up' in insp.outcome %}
-          <span class="text-amber-600 font-medium">{{ insp.outcome }}</span>
+          {% if 'Pass' in insp.outcome or 'Complete' in insp.outcome or 'All Orders' in insp.outcome or insp.outcome in ['Not Required', 'Temp Lic Not Needed'] %}
+          <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">{{ insp.outcome }}</span>
+          {% elif 'Fail' in insp.outcome or insp.outcome in ['Shutdown', 'Vol Shut Down'] %}
+          <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">{{ insp.outcome }}</span>
           {% else %}
-          <span class="text-slate-600">{{ insp.outcome }}</span>
+          <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">{{ insp.outcome }}</span>
           {% endif %}
         </td>
       </tr>
