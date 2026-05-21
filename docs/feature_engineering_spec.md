@@ -223,14 +223,11 @@ Save the final feature matrix. Include the `inspection_date` column (required fo
 - Exception: `days_since_last_inspection` and `most_recent_prior_outcome` may be null for elevators with no prior history — document and fill with a sentinel value (e.g., `-1` for days, `"NO_HISTORY"` for outcome), then assert zero nulls again
 - **Passing:** `df_final.isnull().sum().sum() == 0` after all fills are applied
 
-### Quality Checks
-| Check | Passing condition |
-|---|---|
-| Row count | `len(df_final) < len(df_inspection)` — rows were intentionally dropped in Steps 3 and 4; report exact count removed and reason |
-| Target distribution | Binary target only contains `Passed` and `Needs Action`; report class balance |
-| Prior feature coverage | Report % of rows with `prior_inspection_count == 0`; flag if >50% |
-| Risk score coverage | Report missing RISKSCORE % before and after chosen strategy |
-| Dummy columns | All 3 categorical features encoded (`inspection_type_cleaned`, `equipment_type`, `device_class`); original columns dropped after encoding |
-| Inspection date present | `inspection_date` column exists in final matrix, dtype is `datetime64` |
+### Model Performance Target
+
+**Primary metric:** accuracy — simple and interpretable for an operations audience.
+
+**Target:** beat the majority-class baseline by at least 10 percentage points. If the baseline is 65%, the model must reach at least 75% to be considered useful. A model scoring 66% is barely better than always guessing the most common class.
+
 
 ---

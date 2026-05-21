@@ -241,6 +241,17 @@ What happened: The interaction spec written in Task 1 did not include the overdu
 What I would change: The Task 1 spec should have included the overdue inspection indicator as part of the table design, since the task description explicitly called for it. The omission happened because the spec focused on the detail panel interaction and did not revisit the table columns to check for missing visual indicators. A final review of the table column list against the full task requirements before closing the spec would have caught this.
 
 
+## AND-104 Task 4 — Feature Engineering Spec (subagent exploration of order.csv)
+
+Prompt: "Use a subagent to explore order.csv: its columns, row count, how it connects to inspection.csv, and the distribution of the risk score column."
+
+What happened: The subagent returned a complete profile of order.csv — 162,172 rows, 15 columns, and a clear join path to inspection.csv via `inspectionnumber`. It identified that 40.5% of directive-related columns are null because coded and free-text orders are mutually exclusive, and that RISKSCORE is missing on 25.6% of rows, likely in older records predating the scoring system. The risk score distribution showed a semi-categorical shape dominated by 0 and 15, with extreme outliers above 100. All of this informed the feature engineering decisions made during the SDD interview that followed.
+
+![Subagent output for order.csv exploration](order_csv_subagent_exploration.png)
+
+What I would change: Nothing significant. Running the exploration in a subagent before starting the SDD interview was the right call — it gave concrete numbers to answer the interview questions about scope, constraints, and missing value strategy without loading the raw dataset into the main session.
+
+
 ## AND-103 Task 1 — Interaction Specification (scope assumption on detail panel)
 
 Prompt: "Write the interaction specification for the Elevator Detail Panel using the six SDD elements."
