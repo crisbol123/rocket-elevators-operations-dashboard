@@ -98,6 +98,7 @@ This pipeline builds on Module 2 ETL work. The following decisions and discoveri
 | Inconsistent column name casing | Mix of ALLCAPS, camelCase, Title Case, lowercase with spaces | Normalize all to `snake_case` |
 | Mixed date formats | `LICENSEEXPIRYDATE` → `28-Apr-17`; `first_inspection_date` / `last_inspection_date` → `2015-03-27` | Parse all date columns to `datetime64` |
 | "redacted" as string | `LICENSEHOLDERACCOUNTNUMBER`, `BILLINGACCOUNT` contain `"data redacted"` / `"redacted"` | Replace with `NaN` before any analysis |
+| Multiple rows per device | File is structured one row per alteration record, so each device appears multiple times | Deduplicate on `ElevatingDevicesNumber` before joining to `df_inspection` — a direct left join multiplies inspection rows |
 
 ### Column Name Inconsistencies Across Datasets
 
@@ -108,6 +109,12 @@ This pipeline builds on Module 2 ETL work. The following decisions and discoveri
 | Inspection type | `InspectionType` | `Inspection_type` | — |
 
 Normalize to a consistent name when joining. `Inspection number` in merged is null and should be dropped.
+
+### Date Parsing Notes
+
+- `order.csv` — `DateofIssue` format is `M/D/YYYY H:MM`. `pd.read_csv(parse_dates=['DateofIssue'])` silently fails to parse this format. Use explicit `pd.to_datetime(df_order['DateofIssue'], errors='coerce')` after loading.
+- `inspection.csv` — `Earliest_INSPECTION_Date` / `Latest_INSPECTION_Date` format is `M/D/YYYY`. These parse correctly via `pd.read_csv(parse_dates=[...])`.
+- `merged_elevator_data.csv` — `LICENSEEXPIRYDATE` format is `D-Mon-YY`; requires `pd.to_datetime(..., errors='coerce')` to handle mixed formats.
 
 ### Relationships Discovered During ETL
 
@@ -127,12 +134,9 @@ Steps from raw data to final feature matrix, in order:
 - Load `merged_elevator_data.csv` → `df_static`
 
 ### Step 2 — Clean merged_elevator_data.csv
-- Drop completely empty columns: `Inspection number`, `Alteration contractor name`
-- Drop redundant duplicate columns (keep the version with best null coverage for each concept)
-- Replace `"data redacted"` / `"redacted"` strings with `NaN`
-- Normalize all column names to `snake_case`
-- Parse date columns to `datetime64`
-- Keep for pipeline: `elevating_devices_number`, `equipment_type`, `device_class`, `location`
+- Replace `"data redacted"` / `"redacted"` strings with `NaN` (do this before selecting columns — `location` contains address data that may be redacted)
+- Select only the four columns needed by the pipeline: `ElevatingDevicesNumber`, `equipment_type` (from `Device Type`), `device_class` (from `Device Class`), `location` (from `LocationoftheElevatingDevice`)
+- All other cleaning described in Section 4 (dropping empty/duplicate columns, normalizing names, parsing dates) applies when working with the full dataset but is unnecessary here since those columns are not retained
 
 ### Step 3 — Clean inspection outcome (target variable)
 - Inspect and report value counts of the raw outcome column
@@ -201,6 +205,8 @@ Apply one-hot encoding to the following three categorical features:
 - `device_class` (mandatory)
 - Drop the first dummy column per feature to avoid multicollinearity (`drop_first=True`)
 - Drop the original columns after encoding
+
+**`location` is retained but not encoded.** It is a free-form address string with thousands of unique values — one-hot encoding would produce an unusable number of columns. It is kept in the final matrix as a string column for traceability and potential downstream use (e.g., postal code extraction), but it is not a direct model input.
 
 ### Step 9 — Final validation (see Section 6)
 Run all verification checks before saving.
