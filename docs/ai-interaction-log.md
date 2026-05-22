@@ -214,6 +214,16 @@ What happened: The subagent returned a clear recommendation for TF-IDF + K-Means
 What I would change: Nothing significant. Using a subagent for an open-ended research question before committing to an implementation approach is a pattern worth repeating. The cost of spawning the subagent is low and the output was directly usable as the justification paragraph in the notebook.
 
 
+## AND-103 Task 1 — Interaction Specification (scope assumption on detail panel)
+
+Prompt: "Write the interaction specification for the Elevator Detail Panel using the six SDD elements."
+
+What happened: The model wrote the Task Breakdown section with server implementation steps — specific endpoint names, DataFrame variable names, template filenames, and HTMX attribute strings. This went beyond what the task asked for. Task 1 only requires a design-level spec; the server implementation belongs to a later task. The section had to be rewritten to remove those details and keep the breakdown at the level of design decisions (what the panel shows, how it opens, how it updates, how it closes) rather than coding steps.
+
+What I would change: When a task says "write a spec," I should clarify the expected level of detail before writing. A spec describes behavior and design decisions; it does not prescribe how to implement them in code. Keeping scope explicit in the prompt — "do not include implementation steps" — would have prevented the mismatch.
+
+
+
 ## AND-103 Task 3 — Search input placement (element destroyed on every swap)
 
 Prompt: Implement the search input with debounced requests so the table updates as the user types, but not on every keystroke.
@@ -241,9 +251,9 @@ What happened: The interaction spec written in Task 1 did not include the overdu
 What I would change: The Task 1 spec should have included the overdue inspection indicator as part of the table design, since the task description explicitly called for it. The omission happened because the spec focused on the detail panel interaction and did not revisit the table columns to check for missing visual indicators. A final review of the table column list against the full task requirements before closing the spec would have caught this.
 
 
-## AND-104 Task 4 — Feature Engineering Spec (subagent exploration of order.csv)
+## AND-103 Task 4 — Feature Engineering Spec (subagent exploration of order.csv)
 
-Prompt: "Use a subagent to explore order.csv: its columns, row count, how it connects to inspection.csv, and the distribution of the risk score column."
+Prompt: "Use a subagent to explore order.csv"
 
 What happened: The subagent returned a complete profile of order.csv — 162,172 rows, 15 columns, and a clear join path to inspection.csv via `inspectionnumber`. It identified that 40.5% of directive-related columns are null because coded and free-text orders are mutually exclusive, and that RISKSCORE is missing on 25.6% of rows, likely in older records predating the scoring system. The risk score distribution showed a semi-categorical shape dominated by 0 and 15, with extreme outliers above 100. All of this informed the feature engineering decisions made during the SDD interview that followed.
 
@@ -252,10 +262,154 @@ What happened: The subagent returned a complete profile of order.csv — 162,172
 What I would change: Nothing significant. Running the exploration in a subagent before starting the SDD interview was the right call — it gave concrete numbers to answer the interview questions about scope, constraints, and missing value strategy without loading the raw dataset into the main session.
 
 
-## AND-103 Task 1 — Interaction Specification (scope assumption on detail panel)
+## AND-103 Task 5 — TDD Tests (Plan Mode for feature engineering notebook)
 
-Prompt: "Write the interaction specification for the Elevator Detail Panel using the six SDD elements."
+```
+Plan: Feature Engineering Notebook — Inspection Outcome Prediction Pipeline
 
-What happened: The model wrote the Task Breakdown section with server implementation steps — specific endpoint names, DataFrame variable names, template filenames, and HTMX attribute strings. This went beyond what the task asked for. Task 1 only requires a design-level spec; the server implementation belongs to a later task. The section had to be rewritten to remove those details and keep the breakdown at the level of design decisions (what the panel shows, how it opens, how it updates, how it closes) rather than coding steps.
+Context
 
-What I would change: When a task says "write a spec," I should clarify the expected level of detail before writing. A spec describes behavior and design decisions; it does not prescribe how to implement them in code. Keeping scope explicit in the prompt — "do not include implementation steps" — would have prevented the mismatch.
+The user needs intelligence/feature_engineering.ipynb created from scratch. It does not exist yet. The
+notebook implements a binary classification feature pipeline (Passed / Needs Action) from three raw
+datasets, following /docs/feature_engineering_spec.md. The output is a model-ready feature matrix saved
+to disk.
+
+---
+Critical Files
+
+- Create: /Users/cristianfelipebolanosortega/Documents/aztia/intelligence/feature_engineering.ipynb
+- Read: data/inspection.csv (143,181 × 9) — base table + target
+- Read: data/order.csv (187,416 × 15) — compliance orders
+- Read: data/merged_elevator_data.csv (52,339 × 34) — static device features
+- Write output: data/feature_matrix.csv (final feature matrix)
+
+---
+Key Data Facts (confirmed by exploration)
+
+┌──────────────────────────┬──────────────┬────────────────────────┐
+│         Dataset          │    Shape     │        Join key        │
+├──────────────────────────┼──────────────┼────────────────────────┤
+│ inspection.csv           │ 143,181 × 9  │ ElevatingDevicesNumber │
+├──────────────────────────┼──────────────┼────────────────────────┤
+│ order.csv                │ 187,416 × 15 │ ElevatingDevicesNumber │
+├──────────────────────────┼──────────────┼────────────────────────┤
+│ merged_elevator_data.csv │ 52,339 × 34  │ ElevatingDevicesNumber │
+└──────────────────────────┴──────────────┴────────────────────────┘
+
+- Inspection date columns: Earliest_INSPECTION_Date, Latest_INSPECTION_Date — use Latest_INSPECTION_Date
+  as inspection_date (the date of the recorded outcome).
+- Order date column: DateofIssue (datetime with time component).
+- Completely empty in merged: Inspection number, Alteration contractor name — drop both.
+
+---
+Notebook Structure (one markdown subheader per pipeline step)
+
+1. Data Loading
+- pd.read_csv all three files → df_inspection, df_order, df_static
+- Parse Latest_INSPECTION_Date and Earliest_INSPECTION_Date → datetime64
+- Parse DateofIssue in order.csv → datetime64
+- Print shapes
+
+2. Clean merged_elevator_data.csv
+- Drop Inspection number, Alteration contractor name (100% null)
+- Resolve duplicate columns — keep one per concept with best null coverage:
+  - Location → keep LocationoftheElevatingDevice, drop Location of Device
+  - Owner → keep Owner Name, drop LICENSEHOLDER, BILLINGCUSTOMER, Billing Customer
+  - Address → keep Owner Address, drop LICENSEHOLDERADDRESS, BILLINGADDRESS
+  - Account → keep Owner Account Number, drop LICENSEHOLDERACCOUNTNUMBER, BILLINGACCOUNT;
+    replace "data redacted" / "redacted" with NaN
+- Normalize all column names to snake_case (regex replace)
+- Parse date columns (licenseexpirydate, first_inspection_date, last_inspection_date) → datetime64
+- Keep only: elevating_devices_number, equipment_type, device_class, location
+  - Note: Device Type → equipment_type, Device Class → device_class,
+    LocationoftheElevatingDevice → location
+
+3. Clean Inspection Outcome (target variable)
+- Report InspectionOutcome value counts (raw, ~34 categories)
+- Define exclusion list (12 ambiguous values from spec)
+- Drop excluded rows; report count removed
+- Map remaining to Passed / Needs Action using spec mapping table
+- Store as outcome_binary
+- Report class distribution + majority-class baseline accuracy
+
+4. Clean Inspection Type (feature)
+- Report InspectionType value counts (29 raw categories)
+- Fix double-space typo: "ED-Sub  Inspection" → "ED-Sub Inspection"
+- Map to 7 groups (Periodic, Followup, Alteration, Sub, Initial, Unscheduled, Enforcement)
+- Drop rows with unmapped types (~100 rows, <0.1%)
+- Report row count before/after
+- Store as inspection_type_cleaned
+
+5. Compute Temporal Features from Prior Inspections
+Approach: Sort by (ElevatingDevicesNumber, inspection_date), then use groupby + apply per device.
+
+For each inspection row i (device d, date t):
+- Filter: same device AND inspection_date < t (strict)
+- Compute:
+  - prior_inspection_count — len of prior rows
+  - prior_outcome_counts_passed, prior_outcome_counts_needs_action — counts per binary outcome
+  - prior_type_counts_* — counts per cleaned type (7 columns)
+  - days_since_last_inspection — t - max(prior dates) in days (NaN if no prior)
+  - rolling_pass_rate — pass rate over last 5 prior inspections (justify: recent history most
+    predictive; window of 5 balances signal vs. coverage)
+  - most_recent_prior_outcome — outcome of most recent prior inspection (NaN if no prior)
+- Elevators with no prior inspections: counts → 0, date/outcome → NaN (documented)
+
+Performance note: Use a vectorized approach — shift within sorted groupby or an expanding merge —
+to avoid quadratic row-by-row loops on 143K rows.
+
+6. Aggregate Prior Order Features
+Approach: For each inspection row, join orders with ElevatingDevicesNumber == d AND DateofIssue < t.
+
+- Report missing RISKSCORE: count and % (expected ~25.6%)
+- Compute per-inspection:
+  - prior_order_count — count of prior orders (regardless of risk score)
+  - prior_avg_risk_score — mean of non-null RISKSCORE values from prior orders
+    (NaN if all null or no orders)
+
+Implementation: Group df_order by device, then for each inspection do a filtered join. Use an
+ASOF-style merge or vectorized groupby-apply.
+
+7. Join Static Features
+- Left join df_inspection with cleaned df_static on ElevatingDevicesNumber
+- Retain: equipment_type, device_class, location
+- Report unmatched rows (devices in inspection not in static)
+
+8. Encode Dummy Variables
+- pd.get_dummies on: inspection_type_cleaned, equipment_type, device_class
+- drop_first=True to avoid multicollinearity
+- Drop original categorical columns after encoding
+
+9. Final Validation
+Leakage tests:
+- Assert all prior inspection dates used are strictly < current inspection_date
+- Assert all order DateofIssue values used are strictly < current inspection_date
+- Sample 20 random rows and display dates for manual verification
+
+Missing values test:
+- Fill days_since_last_inspection NaN → -1 (sentinel for no prior history)
+- Fill most_recent_prior_outcome NaN → "NO_HISTORY"; then encode via get_dummies
+- Assert df_final.isnull().sum().sum() == 0 after all fills
+
+Shape report: Print final matrix shape, column list, and class distribution.
+
+10. Output
+- Save to data/feature_matrix.csv (include inspection_date column, not encoded)
+- Print confirmation and shape
+
+---
+Verification
+
+1. Run all notebook cells top-to-bottom — zero errors
+2. Final assertion df_final.isnull().sum().sum() == 0 must pass
+3. Leakage assertion over full dataset must show 0 violations
+4. Class distribution printed (expected: reasonably balanced Passed vs Needs Action)
+5. data/feature_matrix.csv written and readable
+```
+
+---
+
+What happened: The plan was approved and used as the implementation blueprint for `feature_engineering.ipynb`. Several issues were discovered during implementation that the plan did not anticipate: `DateofIssue` in order.csv silently fails to parse with `parse_dates` and requires explicit `pd.to_datetime`; `merged_elevator_data.csv` is one row per alteration record (not per device), so it must be deduplicated before joining; and pandas 2.x `groupby().apply()` strips the groupby key column from the group object, breaking the order features loop. Each discovery was added to the spec as a documented decision.
+
+What I would change: The plan correctly identified the pipeline structure and the leakage prevention logic, but it did not anticipate the pandas 2.x groupby behavior or the date parsing edge case for order.csv. Running a quick exploratory cell on each dataset's date columns and groupby behavior before finalizing the plan would have surfaced these before implementation began. The plan was still valuable — it prevented scope creep and kept the notebook structure consistent — but a small validation pass against actual data would have made it more accurate.
+

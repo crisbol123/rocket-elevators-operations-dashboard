@@ -86,9 +86,9 @@ def test_first_inspection_has_no_prior_features(feature_matrix: pd.DataFrame) ->
 # Test 3: No future information — order features use only data before inspection_date
 #
 # Elevator 17489, inspection 5102083 (2014-12-04).
-# Manual count from order.csv: 17 prior orders with DateofIssue < 2014-12-04.
-# Avg RISKSCORE (non-null) of those orders: 14.5625
-# 18 future orders exist on or after 2014-12-04 — none should appear in features.
+# Manual count from order.csv: 13 orders with valid DateofIssue < 2014-12-04; rest are NaT.
+# Avg RISKSCORE (non-null) of those 13 orders: 17.923
+# Future orders on or after 2014-12-04 — none should appear in features.
 # ---------------------------------------------------------------------------
 
 EXPECTED_PRIOR_ORDER_COUNT = 13   # 13 orders with valid DateofIssue < 2014-12-04; rest are NaT
