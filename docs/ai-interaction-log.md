@@ -413,3 +413,22 @@ What happened: The plan was approved and used as the implementation blueprint fo
 
 What I would change: The plan correctly identified the pipeline structure and the leakage prevention logic, but it did not anticipate the pandas 2.x groupby behavior or the date parsing edge case for order.csv. Running a quick exploratory cell on each dataset's date columns and groupby behavior before finalizing the plan would have surfaced these before implementation began. The plan was still valuable — it prevented scope creep and kept the notebook structure consistent — but a small validation pass against actual data would have made it more accurate.
 
+
+## AND-104, Task 1 — CLAUDE.md Audit (skill granularity decision)
+
+Prompt: "Identify rules scoped to platform work and create a knowledge skill with the platform-specific conventions."
+
+What happened: The model created one skill and put everything inside it — HTMX, Jinja2, and the FastAPI server reference. That means editing a Jinja2 template loads the server reference too, and vice versa. Context that isn't relevant to the file you're editing still gets loaded.
+
+What I would change: One skill per trigger context, not one skill per project layer. The right split was three skills: `fastapi-server` for server.py, `htmx-patterns` for HTML files, and `jinja2-templates` for files in templates/. Each one only loads when it's actually needed.
+
+
+## AND-104, Task 3 — Go API implementation (hardcoded paths)
+
+Prompt: "Implement the REST API defined in the Task 2 spec using Go."
+
+What happened: The model hardcoded the data file paths and the port directly in the code. It worked locally but would break in any other environment without editing the source.
+
+What I would change: Ask for env vars with fallbacks from the start. One line of clarification upfront avoids having to correct it after the fact.
+
+
