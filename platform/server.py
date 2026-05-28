@@ -1,13 +1,17 @@
 from __future__ import annotations
 import asyncio
 import math
+import os
 from pathlib import Path
 
+import httpx
 import pandas as pd
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+
+GO_API = f"http://localhost:{os.getenv('GO_API_PORT', '8081')}"
 
 BASE = Path(__file__).parent
 DATA = BASE.parent / "data"
@@ -151,48 +155,75 @@ def table_fragment(
 
 
 @app.get("/elevator/{elevator_id}", response_class=HTMLResponse)
-def elevator_detail(request: Request, elevator_id: int) -> HTMLResponse:
-    fleet_row = DF[DF["elevator_id"] == elevator_id]
-    if fleet_row.empty:
+async def elevator_detail(request: Request, elevator_id: int) -> HTMLResponse:
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            detail_r, insp_r = await asyncio.gather(
+                client.get(f"{GO_API}/api/elevators/{elevator_id}"),
+                client.get(f"{GO_API}/api/elevators/{elevator_id}/inspections"),
+            )
+    except httpx.ConnectError:
+        return templates.TemplateResponse(
+            request=request,
+            name="api_error.html",
+            context={"message": f"Go API is unavailable. Start the server on {GO_API}."},
+            status_code=503,
+        )
+
+    if detail_r.status_code == 404:
         raise HTTPException(status_code=404, detail="Elevator not found")
 
-    fleet = fleet_row.iloc[0]
-    exp_dt = pd.to_datetime(fleet["license_expiry_date"], format="%d-%b-%y", errors="coerce")
-
-    installed_row = INSTALLED[INSTALLED["Elevating devices number"] == elevator_id]
-    device_type = str(installed_row.iloc[0]["Device Type"]) if not installed_row.empty else ""
-    device_status = str(installed_row.iloc[0]["DeviceStatus"]) if not installed_row.empty else ""
-
-    insp_df = INSPECTIONS[INSPECTIONS["ElevatingDevicesNumber"] == elevator_id].sort_values("_date", ascending=False)
+    detail = detail_r.json()
     inspections = [
-        {
-            "date": row["_date"].strftime("%Y-%m-%d") if pd.notna(row["_date"]) else "",
-            "type": str(row["InspectionType"]),
-            "outcome": str(row["InspectionOutcome"]),
-        }
-        for _, row in insp_df.iterrows()
+        {"date": i["date"], "type": i["type"], "outcome": i["outcome"]}
+        for i in insp_r.json()
     ]
-
-    alteration_count = int((ALTERED["Elevating Devices Number"] == elevator_id).sum())
-    incident_count = int((INCIDENTS["elevating devices number"] == elevator_id).sum())
 
     return templates.TemplateResponse(
         request=request,
         name="elevator_detail.html",
         context={
-            "elevator_id": elevator_id,
-            "device_type": device_type,
-            "device_status": device_status,
-            "license_number": "" if pd.isna(fleet["license_number"]) else str(fleet["license_number"]),
-            "license_status": "" if pd.isna(fleet["license_status"]) else str(fleet["license_status"]),
-            "license_expiry_date": exp_dt.strftime("%Y-%m-%d") if pd.notna(exp_dt) else "",
-            "location": "" if pd.isna(fleet["location"]) else str(fleet["location"]),
+            "elevator_id": detail["elevator_id"],
+            "device_type": detail["device_type"],
+            "device_status": detail["device_status"],
+            "license_number": detail["license_number"],
+            "license_status": detail["license_status"],
+            "license_expiry_date": detail["license_expiry_date"],
+            "location": detail["location"],
             "inspections": inspections,
-            "alteration_count": alteration_count,
-            "incident_count": incident_count,
-            "is_overdue": elevator_id in OVERDUE_IDS,
+            "alteration_count": detail["alteration_count"],
+            "incident_count": detail["incident_count"],
+            "is_overdue": detail["is_overdue"],
         },
     )
+
+
+@app.get("/elevator/{elevator_id}/risk", response_class=HTMLResponse)
+async def elevator_risk(request: Request, elevator_id: int) -> HTMLResponse:
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{GO_API}/api/elevators/{elevator_id}/risk")
+    except httpx.ConnectError:
+        return HTMLResponse(content='<p class="text-sm text-slate-400">Risk API unavailable.</p>', status_code=503)
+
+    if r.status_code == 503:
+        return HTMLResponse(content='<p class="text-sm text-slate-400">Risk scores not yet available.</p>')
+    if r.status_code == 404:
+        return HTMLResponse(content='<p class="text-sm text-slate-400">No risk prediction for this elevator.</p>')
+
+    risk = r.json()
+    level_class = {
+        "low": "bg-emerald-100 text-emerald-700",
+        "medium": "bg-amber-100 text-amber-700",
+        "high": "bg-red-100 text-red-700",
+    }.get(risk["risk_level"], "bg-slate-100 text-slate-600")
+
+    return HTMLResponse(content=f"""
+        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {level_class}">
+            {risk["risk_level"].upper()} — {risk["risk_score"]:.2f}
+        </span>
+        <p class="text-xs text-slate-400 mt-1">As of {risk["predicted_at"]}</p>
+    """)
 
 
 @app.get("/fragments/close", response_class=HTMLResponse)

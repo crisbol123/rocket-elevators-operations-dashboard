@@ -1,4 +1,7 @@
 {
+  "env": {
+    "GO_API_PORT": "8081"
+  },
   "hooks": {
     "PostToolUse": [
       {

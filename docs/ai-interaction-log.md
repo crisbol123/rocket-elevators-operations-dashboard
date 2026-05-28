@@ -414,6 +414,8 @@ What happened: The plan was approved and used as the implementation blueprint fo
 What I would change: The plan correctly identified the pipeline structure and the leakage prevention logic, but it did not anticipate the pandas 2.x groupby behavior or the date parsing edge case for order.csv. Running a quick exploratory cell on each dataset's date columns and groupby behavior before finalizing the plan would have surfaced these before implementation began. The plan was still valuable — it prevented scope creep and kept the notebook structure consistent — but a small validation pass against actual data would have made it more accurate.
 
 
+
+
 ## AND-104, Task 1 — CLAUDE.md Audit (skill granularity decision)
 
 Prompt: "Identify rules scoped to platform work and create a knowledge skill with the platform-specific conventions."
@@ -430,5 +432,14 @@ Prompt: "Implement the REST API defined in the Task 2 spec using Go."
 What happened: The model hardcoded the data file paths and the port directly in the code. It worked locally but would break in any other environment without editing the source.
 
 What I would change: Ask for env vars with fallbacks from the start. One line of clarification upfront avoids having to correct it after the fact.
+
+
+## AND-104, Task 5 — Frontend integration (server-side proxy vs direct calls)
+
+Prompt: "Connect the Python frontend to the Go API for the detail panel. Choose an integration strategy and implement it."
+
+What happened: Went with server-side proxy — no CORS issues, HTMX stays talking to one origin, and error handling lives in Python. Worked well. The one thing that bit us was that HTMX silently drops non-2xx responses by default, so the error state never showed up until we added a `htmx:responseError` handler manually.
+
+What I would change: Think through HTMX error handling before implementation. If the server returns anything other than 200, HTMX won't swap it — that's not obvious and costs time to debug.
 
 

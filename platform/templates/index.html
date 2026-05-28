@@ -172,6 +172,14 @@
       panel.style.display = hasContent ? '' : 'none';
       if (!hasContent) clearRowHighlight();
     });
+
+    // Show error content in the panel even on non-2xx responses
+    htmx.on('htmx:responseError', function (evt) {
+      if (evt.detail.target.id !== 'detail-panel') return;
+      var panel = evt.detail.target;
+      panel.innerHTML = evt.detail.xhr.responseText;
+      panel.style.display = '';
+    });
   </script>
 </div>
 </body>

@@ -103,11 +103,20 @@
 </div>
 
 {# Incidents #}
-<div class="px-5 py-4">
+<div class="px-5 py-4 border-b border-slate-200">
   <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Incidents</p>
   {% if incident_count > 0 %}
   <p class="text-sm text-slate-700">{{ incident_count }} incident record{{ 's' if incident_count != 1 }}</p>
   {% else %}
   <p class="text-sm text-slate-400">No incidents on record.</p>
   {% endif %}
+</div>
+
+{# Risk Score — loaded from Go API via proxy #}
+<div class="px-5 py-4"
+     hx-get="/elevator/{{ elevator_id }}/risk"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+  <p class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Risk Score</p>
+  <p class="text-sm text-slate-400">Loading…</p>
 </div>

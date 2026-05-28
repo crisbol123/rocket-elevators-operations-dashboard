@@ -274,6 +274,8 @@ When a user clicks any row in the elevator table, a detail panel slides in from 
   - **Amber:** all other outcomes. If no inspections exist, show "No inspection records found." If the elevator's last inspection was more than 12 months before today, an "⚠ Overdue" badge appears next to the section title.
 - **Alterations section:** Total count of alteration records for that elevator. If the count is zero, show "No alterations on record."
 - **Incidents section:** Total count of incident records for that elevator. If the count is zero, show "No incidents on record."
+- **Risk score section:** Predicted risk score and level (`low`, `medium`, `high`) for the elevator, sourced from the Go API. Loaded asynchronously via HTMX after the panel renders. If the Go API has not yet generated predictions, shows "Risk scores not yet available." If no prediction exists for the elevator, shows "No risk prediction for this elevator."
+- **Error state:** If the Go API is unavailable when a row is clicked, the panel shows a clear error message in red instead of data. The frontend does not crash.
 
 The panel remains visible until the user explicitly closes it. Clicking a different row while the panel is open replaces the panel content with the new elevator's data without closing and reopening the panel.
 
@@ -297,17 +299,17 @@ The panel remains visible until the user explicitly closes it. Clicking a differ
 - The panel has a fixed width of 384 px. On viewports narrower than 768 px the panel is not required to work; this is an internal desktop tool.
 - The panel does not affect filter, sort, or pagination state. Those interactions remain fully independent of the panel.
 - All inspection records for the elevator are shown in the panel without pagination.
-- Data sources for each section (resolved — see Prior Decisions): basic info and license data from the main fleet dataset; inspection history from `inspection.csv`; alteration count from `altered.json`; incident count from `incident.json`.
+- Data sources for each section (resolved — see Prior Decisions): all panel data fetched from the Go API via server-side proxy. Risk scores loaded asynchronously from `/api/elevators/{id}/risk`.
 
 #### 4. Prior Decisions
 
-- **Data source strategy:** Individual source files (`inspection.csv`, `incident.json`, `altered.json`) are used for the panel instead of `merged_elevator_data.csv`. The merged file is denormalized (one row per alteration, ~52 k rows) and contains only aggregated inspection data, making it unsuitable for listing individual inspection records or reliably counting incidents per elevator.
+- **Data source strategy:** Panel data is fetched from the Go API (`/api/elevators/{id}` and `/api/elevators/{id}/inspections`) via a server-side proxy in the Python FastAPI server. The Python server calls the Go API on each detail request and passes the JSON response to the Jinja2 template. Risk scores come from `/api/elevators/{id}/risk`. This replaced the previous approach of reading individual source files (`inspection.csv`, `incident.json`, `altered.json`) directly in Python.
 - **Panel is independent of table state:** Changing filters, sorting, or paginating the table does not close or refresh the panel. The panel shows the last clicked elevator until the user explicitly closes it or clicks a different row.
 - **Active-row highlight is client-driven:** The highlight is applied immediately on click via a delegated click listener on the table body — no server round-trip is needed. When the user clicks a row, the listener removes the highlight from any previously active row and applies it to the clicked one. When the panel is closed, the listener clears all highlights. This approach was chosen over a server-driven OOB swap because the highlight is purely visual feedback that does not depend on server state.
 
 #### 5. Task Breakdown
 
-1. Define the panel layout: header strip (Elevator ID, device type, status badge), then four stacked sections (Basic Info, Inspection History, Alterations, Incidents) each with a section label and its content.
+1. Define the panel layout: header strip (Elevator ID, device type, status badge), then five stacked sections (Basic Info, Inspection History, Alterations, Incidents, Risk Score) each with a section label and its content.
 2. Define the trigger: clicking a table row opens the panel with that elevator's data. The click target is the full row, not a specific cell.
 3. Define the update behavior: if the panel is already open and the user clicks a different row, the panel content is replaced in place — the panel does not close and reopen.
 4. Define the close behavior: an ✕ button in the top-right corner of the panel closes it. The active-row highlight is removed when the panel closes.
@@ -316,7 +318,8 @@ The panel remains visible until the user explicitly closes it. Clicking a differ
 
 #### 6. Verification Criteria
 
-- Clicking any row opens the panel and displays correct data for that elevator across all five sections.
+- Clicking any row opens the panel and displays correct data for that elevator across all six sections.
+- If the Go API is unavailable, the panel shows a clear error message and does not crash.
 - The inspection list is sorted newest-first.
 - Clicking a second row while the panel is open replaces the panel content without the panel closing or flickering.
 - The ✕ button closes the panel and removes the active-row highlight from the table.
