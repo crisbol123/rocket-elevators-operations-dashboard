@@ -321,6 +321,123 @@ Returns the predicted risk score for a specific elevator.
 
 ---
 
+### GET /api/fleet/stats
+
+Returns aggregate fleet statistics.
+
+**No query parameters.**
+
+**Success response — 200 OK:**
+
+| Field | Type | Note |
+|---|---|---|
+| total_elevators | integer | Total number of elevators in the fleet |
+| by_risk_level | object | Count of elevators per risk level |
+| by_risk_level.high | integer | Elevators with risk score ≥ 0.7 |
+| by_risk_level.medium | integer | Elevators with 0.4 ≤ risk score < 0.7 |
+| by_risk_level.low | integer | Elevators with risk score < 0.4 |
+| inspection_pass_rate | float | Fraction of all inspections with outcome "Passed" (0.0–1.0, rounded to 4 decimal places; trailing zeros are dropped per JSON float serialization) |
+| by_equipment_type | object | Count of elevators per device type string from `installed.json` |
+
+#### Example Response
+
+```json
+{
+  "total_elevators": 38284,
+  "by_risk_level": {
+    "high": 11503,
+    "medium": 15312,
+    "low": 11469
+  },
+  "inspection_pass_rate": 0.182,
+  "by_equipment_type": {
+    "Passenger Elevator": 32405,
+    "Freight Elevator": 2912,
+    "LULA Elevator": 1254,
+    "Escalator": 891,
+    "Unknown": 822
+  }
+}
+```
+
+**Error responses:**
+
+- `503 Service Unavailable` — `data/predictions.csv` does not exist (risk level counts require predictions)
+
+```json
+{ "error": "predictions not available" }
+```
+
+**Data sources:** `platform/elevator_fleet.csv` (total count, equipment type via `data/installed.json`), `data/inspection.csv` (pass rate), `data/predictions.csv` (by_risk_level)
+
+---
+
+### GET /api/fleet/alerts
+
+Returns elevators needing immediate attention: those with a high risk level whose most recent inspection outcome is not "Passed".
+
+**No query parameters.**
+
+**Success response — 200 OK:**
+
+Array of alert objects, sorted by `risk_score` descending. Returns an empty array `[]` if no elevators meet both criteria.
+
+| Field | Type | Note |
+|---|---|---|
+| [].elevator_id | integer | Elevator identifier |
+| [].risk_score | float | Raw risk score from predictions (0.0–1.0) |
+| [].risk_level | string | Always `"high"` for items in this list (score ≥ 0.7) |
+| [].last_inspection_date | string (YYYY-MM-DD) | Date of the most recent inspection |
+| [].last_inspection_outcome | string | Outcome string of the most recent inspection (any value other than `"Passed"`) |
+| [].equipment_type | string | Device type from `installed.json`; empty string if the elevator has no installed record |
+
+**Alert criteria (both must be true):**
+- `risk_level` is `"high"` (i.e., `risk_score` ≥ 0.7)
+- Most recent inspection outcome is not `"Passed"`
+
+Elevators with no inspection records are excluded.
+
+#### Example Response
+
+```json
+[
+  {
+    "elevator_id": 10312,
+    "risk_score": 0.97,
+    "risk_level": "high",
+    "last_inspection_date": "2019-03-14",
+    "last_inspection_outcome": "Follow up",
+    "equipment_type": "Passenger Elevator"
+  },
+  {
+    "elevator_id": 7841,
+    "risk_score": 0.94,
+    "risk_level": "high",
+    "last_inspection_date": "2018-11-02",
+    "last_inspection_outcome": "Shutdown",
+    "equipment_type": "Freight Elevator"
+  }
+]
+```
+
+Empty response when no elevators match:
+
+```json
+[]
+```
+
+**Error responses:**
+
+- `503 Service Unavailable` — `data/predictions.csv` does not exist (risk level cannot be determined)
+
+```json
+{ "error": "predictions not available" }
+```
+
+**Data sources:** `platform/elevator_fleet.csv`, `data/predictions.csv` (risk score and level), `data/inspection.csv` (most recent outcome), `data/installed.json` (equipment type)
+
+---
+
 ## 6. Verification Criteria
 
 - `GET /api/elevators` returns `Content-Type: application/json` and a valid paginated envelope

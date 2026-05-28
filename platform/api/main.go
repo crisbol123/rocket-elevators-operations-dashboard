@@ -97,6 +97,22 @@ type errResponse struct {
 	Error string `json:"error"`
 }
 
+type fleetStatsResponse struct {
+	TotalElevators     int            `json:"total_elevators"`
+	ByRiskLevel        map[string]int `json:"by_risk_level"`
+	InspectionPassRate float64        `json:"inspection_pass_rate"`
+	ByEquipmentType    map[string]int `json:"by_equipment_type"`
+}
+
+type fleetAlertItem struct {
+	ElevatorID            int     `json:"elevator_id"`
+	RiskScore             float64 `json:"risk_score"`
+	RiskLevel             string  `json:"risk_level"`
+	LastInspectionDate    string  `json:"last_inspection_date"`
+	LastInspectionOutcome string  `json:"last_inspection_outcome"`
+	EquipmentType         string  `json:"equipment_type"`
+}
+
 // --- Global state ---
 
 var (
@@ -585,6 +601,89 @@ func handleGetRisk(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func handleFleetStats(w http.ResponseWriter, r *http.Request) {
+	if riskByID == nil {
+		writeErr(w, http.StatusServiceUnavailable, "predictions not available")
+		return
+	}
+
+	byRiskLevel := map[string]int{"high": 0, "medium": 0, "low": 0}
+	for _, row := range riskByID {
+		byRiskLevel[row.riskLevel]++
+	}
+
+	var total, passed int
+	for _, rows := range inspByID {
+		for _, row := range rows {
+			total++
+			if row.outcome == "Passed" {
+				passed++
+			}
+		}
+	}
+	var passRate float64
+	if total > 0 {
+		passRate = math.Round(float64(passed)/float64(total)*10000) / 10000
+	}
+
+	byEquipmentType := make(map[string]int)
+	for _, row := range fleet {
+		dt := installed[row.elevatorID].deviceType
+		if dt == "" {
+			dt = "Unknown"
+		}
+		byEquipmentType[dt]++
+	}
+
+	writeJSON(w, http.StatusOK, fleetStatsResponse{
+		TotalElevators:     len(fleet),
+		ByRiskLevel:        byRiskLevel,
+		InspectionPassRate: passRate,
+		ByEquipmentType:    byEquipmentType,
+	})
+}
+
+func handleFleetAlerts(w http.ResponseWriter, r *http.Request) {
+	if riskByID == nil {
+		writeErr(w, http.StatusServiceUnavailable, "predictions not available")
+		return
+	}
+
+	var alerts []fleetAlertItem
+	for _, row := range fleet {
+		risk, hasRisk := riskByID[row.elevatorID]
+		if !hasRisk || risk.riskLevel != "high" {
+			continue
+		}
+		rows := inspByID[row.elevatorID]
+		if len(rows) == 0 {
+			continue
+		}
+		latest := rows[0] // already sorted date desc by loadInspections
+		if latest.outcome == "Passed" {
+			continue
+		}
+		alerts = append(alerts, fleetAlertItem{
+			ElevatorID:            row.elevatorID,
+			RiskScore:             risk.riskScore,
+			RiskLevel:             risk.riskLevel,
+			LastInspectionDate:    latest.dateISO,
+			LastInspectionOutcome: latest.outcome,
+			EquipmentType:         installed[row.elevatorID].deviceType,
+		})
+	}
+
+	sort.Slice(alerts, func(i, j int) bool {
+		return alerts[i].RiskScore > alerts[j].RiskScore
+	})
+
+	if alerts == nil {
+		alerts = []fleetAlertItem{}
+	}
+
+	writeJSON(w, http.StatusOK, alerts)
+}
+
 // --- Helpers ---
 
 func parseElevatorID(w http.ResponseWriter, r *http.Request) (int, bool) {
@@ -637,6 +736,8 @@ func main() {
 	mux.HandleFunc("GET /api/elevators/{id}", handleGetElevator)
 	mux.HandleFunc("GET /api/elevators/{id}/inspections", handleGetInspections)
 	mux.HandleFunc("GET /api/elevators/{id}/risk", handleGetRisk)
+	mux.HandleFunc("GET /api/fleet/stats", handleFleetStats)
+	mux.HandleFunc("GET /api/fleet/alerts", handleFleetAlerts)
 
 	fmt.Printf("Rocket Elevators API listening on :%s\n", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
