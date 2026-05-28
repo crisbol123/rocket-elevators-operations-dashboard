@@ -72,7 +72,7 @@ The Go service is a pure data API. It does not render HTML and has no dependency
 | inspection location | data/inspection.csv | InspectionLocation |
 | risk_score | data/predictions.csv | risk_score (forward dependency — Task 6) |
 | risk_level | derived | computed from risk_score thresholds |
-| predicted_at | data/predictions.csv | predicted_at (forward dependency — Task 6) |
+| predicted_at | data/predictions.csv | prediction_date (forward dependency — Task 6) |
 
 ---
 
@@ -293,9 +293,9 @@ Returns the predicted risk score for a specific elevator.
 ```
 
 `risk_level` is derived from `risk_score` using these thresholds:
-- `low`: score < 0.33
-- `medium`: 0.33 ≤ score < 0.66
-- `high`: score ≥ 0.66
+- `low`: score < 0.4
+- `medium`: 0.4 ≤ score < 0.7
+- `high`: score ≥ 0.7
 
 **Error responses:**
 

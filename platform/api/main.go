@@ -27,7 +27,7 @@ type fleetRow struct {
 
 type installedRow struct {
 	deviceType   string
-	deviceStatus string 
+	deviceStatus string
 }
 
 type inspectionRow struct {
@@ -54,6 +54,7 @@ type listItem struct {
 	LicenseStatus     string `json:"license_status"`
 	LicenseExpiryDate string `json:"license_expiry_date"`
 	IsOverdue         bool   `json:"is_overdue"`
+	RiskLevel         string `json:"risk_level"`
 }
 
 type listResponse struct {
@@ -100,13 +101,13 @@ type errResponse struct {
 
 var (
 	fleet       []fleetRow
-	fleetIndex  map[int]int 
+	fleetIndex  map[int]int
 	installed   map[int]installedRow
 	alterations map[int]int
 	incidents   map[int]int
 	inspByID    map[int][]inspectionRow
 	overdueIDs  map[int]bool
-	riskByID    map[int]riskRow 
+	riskByID    map[int]riskRow
 )
 
 // --- Path helpers ---
@@ -333,16 +334,16 @@ func loadPredictions() {
 		riskByID[id] = riskRow{
 			riskScore:   score,
 			riskLevel:   computeRiskLevel(score),
-			predictedAt: rec[idx["predicted_at"]],
+			predictedAt: rec[idx["prediction_date"]],
 		}
 	}
 }
 
 func computeRiskLevel(score float64) string {
-	if score < 0.33 {
+	if score < 0.4 {
 		return "low"
 	}
-	if score < 0.66 {
+	if score < 0.7 {
 		return "medium"
 	}
 	return "high"
@@ -494,6 +495,7 @@ func handleListElevators(w http.ResponseWriter, r *http.Request) {
 			LicenseStatus:     row.licenseStatus,
 			LicenseExpiryDate: row.expiryISO,
 			IsOverdue:         overdueIDs[row.elevatorID],
+			RiskLevel:         riskByID[row.elevatorID].riskLevel,
 		})
 	}
 
