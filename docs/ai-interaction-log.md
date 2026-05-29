@@ -465,6 +465,14 @@ Why a skill and not a hook or subagent: it's a deliberate action at a specific m
 What I would change: Call `/sample-endpoint` at the start of Step 1 in `/new-endpoint` so spec examples always come from real data, never from memory.
 
 
+## AND-104 Task 7 — new-endpoint skill (spec insert location)
+
+Prompt: "The skill takes an endpoint name and description as arguments. Its instructions define a multi-step workflow covering spec update, code generation, route registration, and validation."
+
+What happened: The first version of the skill told Claude to "append at the bottom of the file" with no further context. The spec already has a numbered structure, and all existing endpoints live under `## 5. Task Breakdown`. Without a precise insert location, the skill could have placed the new section after `## 6. Verification Criteria` or somewhere else that breaks the document structure.
+
+What I would change: Whenever a skill edits a file that has known structure, it should name the exact section to insert into, not just "at the end." One extra line in the skill instruction removes an ambiguity that would otherwise produce inconsistent outputs across runs.
+
 ## AND-104 Task 8 — API validation (undocumented risk_level field)
 
 Prompt: "Use /validate-api to verify all six API endpoints against the spec. Document any mismatches and fix them."
@@ -474,17 +482,6 @@ What happened: Five of the six endpoints passed cleanly. The only structural mis
 Both were fixed by updating the spec: `risk_level` was added to the `GET /api/elevators` response table, and a note was added to `GET /api/fleet/stats` explaining the exclusion.
 
 What I would change: When a new field is added to an existing endpoint — even as a small enhancement — the spec should be updated in the same commit. The gap here existed because Task 6 touched the Go handler but not the spec document.
-
-
-## AND-104 Task 7 — new-endpoint skill (spec insert location)
-
-Prompt: "The skill takes an endpoint name and description as arguments. Its instructions define a multi-step workflow covering spec update, code generation, route registration, and validation."
-
-What happened: The first version of the skill told Claude to "append at the bottom of the file" with no further context. The spec already has a numbered structure, and all existing endpoints live under `## 5. Task Breakdown`. Without a precise insert location, the skill could have placed the new section after `## 6. Verification Criteria` or somewhere else that breaks the document structure.
-
-What I would change: Whenever a skill edits a file that has known structure, it should name the exact section to insert into, not just "at the end." One extra line in the skill instruction removes an ambiguity that would otherwise produce inconsistent outputs across runs.
-
-
 ## AND-104 Task 8 — go_build hook refinement (auto-restart after successful build)
 
 Prompt: "The `go_build.py` hook only builds and makes me restart by hand. Refine it so a successful build automatically restarts the API."
@@ -496,6 +493,13 @@ The hook already knew the directory and had just confirmed the build passed — 
 What I would change: Nothing — this is the right refinement. The only thing I would have done differently is add it in Task 4 when the hook was first written, since the restart pattern was already established by then.
 
 
+## AND-104 Task 8 — go_build as hook, not skill (mechanism choice)
+
+The build-and-restart behavior lives in a hook because it has to fire automatically when a `.go` file changes — I shouldn't have to remember to call it. A skill is the wrong fit here: skills are deliberate, hooks are reactive. If I had made this a skill I would have forgotten to run it at least once and shipped a stale binary.
+
+## AND-104 Task 8 — validate-api as subagent inside a skill (mechanism choice)
+
+I could have made `validate-api` a bash script that just curls the endpoint and diffs the output. I didn't because validation requires judgment — comparing field types, interpreting edge cases, deciding what counts as a mismatch. That's reasoning work, not shell work. A subagent can do that; a script can't. The skill is just the trigger that hands off to the subagent with the right context.
 ## AND-104 Task 8 — CC extensions assessment
 
 **Most valuable: validate-api**
