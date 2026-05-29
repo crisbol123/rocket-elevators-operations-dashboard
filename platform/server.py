@@ -4,8 +4,9 @@ import math
 import os
 from pathlib import Path
 
+from datetime import date
+
 import httpx
-import pandas as pd
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import HTTPException
 from fastapi.responses import HTMLResponse
@@ -14,50 +15,39 @@ from fastapi.templating import Jinja2Templates
 GO_API = f"http://localhost:{os.getenv('GO_API_PORT', '8081')}"
 
 BASE = Path(__file__).parent
-DATA = BASE.parent / "data"
 PAGE_SIZE = 10
 
 app = FastAPI()
 templates = Jinja2Templates(directory=str(BASE / "templates"))
 
 
-# DEV ONLY — remove before deploying to production.
-# Requests are near-instant locally so the loading spinner is invisible without this delay.
+
 @app.middleware("http")
 async def dev_delay(request: Request, call_next):
     await asyncio.sleep(0.2)
     return await call_next(request)
 
-DF: pd.DataFrame = pd.DataFrame()
-EXPIRY: pd.Series = pd.Series(dtype="datetime64[ns]")
-INSTALLED: pd.DataFrame = pd.DataFrame()
-INSPECTIONS: pd.DataFrame = pd.DataFrame()
-ALTERED: pd.DataFrame = pd.DataFrame()
-INCIDENTS: pd.DataFrame = pd.DataFrame()
-OVERDUE_IDS: set[int] = set()
-
-
-@app.on_event("startup")
-def load_data() -> None:
-    global DF, EXPIRY, INSTALLED, INSPECTIONS, ALTERED, INCIDENTS, OVERDUE_IDS
-    DF = pd.read_csv(BASE / "elevator_fleet.csv").sort_values("elevator_id").reset_index(drop=True)
-    EXPIRY = pd.to_datetime(DF["license_expiry_date"], format="%d-%b-%y", errors="coerce")
-    INSTALLED = pd.read_json(DATA / "installed.json")
-    INSPECTIONS = pd.read_csv(DATA / "inspection.csv")
-    INSPECTIONS["_date"] = pd.to_datetime(INSPECTIONS["Latest_INSPECTION_Date"], format="%m/%d/%Y", errors="coerce")
-    ALTERED = pd.read_json(DATA / "altered.json")
-    INCIDENTS = pd.read_json(DATA / "incident.json")
-    last_insp = INSPECTIONS.groupby("ElevatingDevicesNumber")["_date"].max()
-    ref_date = pd.Timestamp.today().normalize()
-    OVERDUE_IDS = set(last_insp[last_insp < (ref_date - pd.Timedelta(days=365))].index)
-
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request) -> HTMLResponse:
-    today = pd.Timestamp.today().normalize()
-    total = len(DF)
-    active = int((DF["license_status"] == "ACTIVE").sum())
-    expired = int((EXPIRY < today).sum())
+async def dashboard(request: Request) -> HTMLResponse:
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            all_r, active_r, expired_r = await asyncio.gather(
+                client.get(f"{GO_API}/api/elevators", params={"page": 1}),
+                client.get(f"{GO_API}/api/elevators", params={"status": "ACTIVE", "page": 1}),
+                client.get(f"{GO_API}/api/elevators", params={"expired": "yes", "page": 1}),
+            )
+    except httpx.ConnectError:
+        return templates.TemplateResponse(
+            request=request, name="api_error.html",
+            context={"message": f"Go API is unavailable. Start the server on {GO_API}."},
+            status_code=503,
+        )
+
+    total = all_r.json().get("total", 0) if all_r.status_code == 200 else 0
+    active = active_r.json().get("total", 0) if active_r.status_code == 200 else 0
+    expired = expired_r.json().get("total", 0) if expired_r.status_code == 200 else 0
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -66,7 +56,7 @@ def dashboard(request: Request) -> HTMLResponse:
 
 
 @app.get("/fragments/table", response_class=HTMLResponse)
-def table_fragment(
+async def table_fragment(
     request: Request,
     page: int = Query(default=1, ge=1),
     status: str = Query(default="all"),
@@ -77,67 +67,52 @@ def table_fragment(
     sort_by: str = Query(default="elevator_id"),
     sort_dir: str = Query(default="asc"),
 ) -> HTMLResponse:
-    today = pd.Timestamp.today().normalize()
+    params = {
+        "page": page, "status": status, "expired": expired,
+        "inspection": inspection, "search_id": search_id,
+        "search_location": search_location, "sort_by": sort_by, "sort_dir": sort_dir,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{GO_API}/api/elevators", params=params)
+    except httpx.ConnectError:
+        return templates.TemplateResponse(
+            request=request, name="api_error.html",
+            context={"message": f"Go API is unavailable. Start the server on {GO_API}."},
+            status_code=503,
+        )
 
-    df = DF.copy()
-    df["_expiry"] = EXPIRY.values
-
-    if status != "all":
-        df = df[df["license_status"] == status]
-
-    if expired == "yes":
-        df = df[df["_expiry"] < today]
-    elif expired == "no":
-        df = df[~(df["_expiry"] < today)]
-
-    if inspection == "overdue":
-        df = df[df["elevator_id"].isin(OVERDUE_IDS)]
-    elif inspection == "ok":
-        df = df[~df["elevator_id"].isin(OVERDUE_IDS)]
-
-    if search_id:
-        df = df[df["elevator_id"].astype(str).str.startswith(search_id.strip()[:100])]
-    if search_location:
-        df = df[df["location"].str.lower().str.contains(search_location.strip()[:100].lower(), na=False)]
-
-    if sort_by == "license_expiry_date":
-        df = df.sort_values("_expiry", ascending=(sort_dir == "asc"), na_position="last")
-    else:
-        df = df.sort_values("elevator_id", ascending=(sort_dir == "asc"))
-
-    df = df.reset_index(drop=True)
-
-    total = len(df)
-    total_pages = max(1, math.ceil(total / PAGE_SIZE))
-    page = min(page, total_pages)
-    start = (page - 1) * PAGE_SIZE
-    end = min(start + PAGE_SIZE, total)
-
-    card_total = f"{total:,}"
-    card_active = f"{int((df['license_status'] == 'ACTIVE').sum()):,}"
-    card_expired = f"{int((df['_expiry'] < today).sum()):,}"
+    data = r.json()
+    today = date.today().isoformat()
 
     rows = []
-    for _, row in df.iloc[start:end].iterrows():
-        exp_dt = row["_expiry"]
+    for item in data["data"]:
+        expiry = item["license_expiry_date"]
         rows.append({
-            "elevator_id": int(row["elevator_id"]) if pd.notna(row["elevator_id"]) else "",
-            "location": "" if pd.isna(row["location"]) else str(row["location"]),
-            "city": "" if pd.isna(row["city"]) else str(row["city"]),
-            "license_status": "" if pd.isna(row["license_status"]) else str(row["license_status"]),
-            "license_expiry_date_fmt": exp_dt.strftime("%Y-%m-%d") if pd.notna(exp_dt) else "",
-            "is_expired": pd.notna(exp_dt) and exp_dt < today,
-            "is_overdue": int(row["elevator_id"]) in OVERDUE_IDS,
+            "elevator_id": item["elevator_id"],
+            "location": item["location"],
+            "city": item["city"],
+            "license_status": item["license_status"],
+            "license_expiry_date_fmt": expiry,
+            "is_expired": bool(expiry) and expiry < today,
+            "is_overdue": item["is_overdue"],
+            "risk_level": item.get("risk_level", ""),
         })
+
+    total = data["total"]
+    actual_page = data["page"]
+    total_pages = data["total_pages"]
+    start = (actual_page - 1) * PAGE_SIZE + 1 if total > 0 else 0
+    end = min(actual_page * PAGE_SIZE, total)
 
     return templates.TemplateResponse(
         request=request,
         name="table_fragment.html",
         context={
             "rows": rows,
-            "page": page,
+            "page": actual_page,
             "total_pages": total_pages,
-            "start": f"{start + 1:,}" if total > 0 else "0",
+            "start": f"{start:,}" if total > 0 else "0",
             "end": f"{end:,}",
             "total": f"{total:,}",
             "status": status,
@@ -147,9 +122,7 @@ def table_fragment(
             "search_location": search_location,
             "sort_by": sort_by,
             "sort_dir": sort_dir,
-            "card_total": card_total,
-            "card_active": card_active,
-            "card_expired": card_expired,
+            "card_total": f"{total:,}",
         },
     )
 
@@ -224,6 +197,75 @@ async def elevator_risk(request: Request, elevator_id: int) -> HTMLResponse:
         </span>
         <p class="text-xs text-slate-400 mt-1">As of {risk["predicted_at"]}</p>
     """)
+
+
+@app.get("/fragments/fleet-health", response_class=HTMLResponse)
+async def fleet_health(request: Request) -> HTMLResponse:
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{GO_API}/api/fleet/stats")
+    except httpx.ConnectError:
+        return HTMLResponse(content='<p class="text-sm text-red-500">Fleet stats unavailable — Go API is not running.</p>')
+
+    if r.status_code == 503:
+        return HTMLResponse(content='<p class="text-sm text-slate-400">Fleet stats not available — predictions have not been generated yet.</p>')
+
+    stats = r.json()
+    by_risk = stats["by_risk_level"]
+    total = stats["total_elevators"]
+    pass_rate = round(stats["inspection_pass_rate"] * 100, 1)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="fleet_health.html",
+        context={
+            "total_elevators": f"{total:,}",
+            "high": f"{by_risk.get('high', 0):,}",
+            "medium": f"{by_risk.get('medium', 0):,}",
+            "low": f"{by_risk.get('low', 0):,}",
+            "pass_rate": f"{pass_rate}%",
+        },
+    )
+
+
+@app.get("/alerts", response_class=HTMLResponse)
+async def alerts_page(request: Request, page: int = Query(default=1, ge=1)) -> HTMLResponse:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(f"{GO_API}/api/fleet/alerts")
+    except httpx.ConnectError:
+        return templates.TemplateResponse(
+            request=request, name="api_error.html",
+            context={"message": f"Go API is unavailable. Start the server on {GO_API}."},
+            status_code=503,
+        )
+
+    if r.status_code == 503:
+        return templates.TemplateResponse(
+            request=request, name="api_error.html",
+            context={"message": "Predictions not available — run the prediction notebook first."},
+            status_code=503,
+        )
+
+    all_alerts = r.json()
+    total = len(all_alerts)
+    total_pages = max(1, math.ceil(total / PAGE_SIZE))
+    page = min(page, total_pages)
+    start = (page - 1) * PAGE_SIZE
+    end = min(start + PAGE_SIZE, total)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="alerts.html",
+        context={
+            "alerts": all_alerts[start:end],
+            "page": page,
+            "total_pages": total_pages,
+            "total": f"{total:,}",
+            "start": f"{start + 1:,}" if total > 0 else "0",
+            "end": f"{end:,}",
+        },
+    )
 
 
 @app.get("/fragments/close", response_class=HTMLResponse)

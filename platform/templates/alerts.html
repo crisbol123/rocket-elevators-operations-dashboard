@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alerts — Rocket Elevators</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-100 font-sans text-slate-900">
+<div class="flex min-h-screen">
+
+  <!-- Sidebar -->
+  <aside class="w-64 shrink-0 bg-[#1E2430] text-white flex flex-col">
+    <div class="px-6 py-6">
+      <div class="text-lg font-semibold">Rocket Elevators</div>
+      <div class="mt-0.5 text-xs text-slate-400 uppercase tracking-widest">Operations</div>
+    </div>
+    <div class="mx-4 border-t border-[#2B3548]"></div>
+    <nav class="flex flex-col gap-1 px-2 mt-3">
+      <a href="/" class="flex items-center gap-2 rounded-md px-4 py-2 text-sm text-slate-300 hover:bg-[#2B3548] hover:text-white transition-colors">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </a>
+      <a href="/alerts" class="flex items-center gap-2 rounded-md bg-[#2B3548] px-4 py-2 text-sm font-medium border-l-4 border-[#4DA3FF]">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        Alerts
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Main content -->
+  <main class="flex-1 p-8 overflow-auto">
+
+    <div class="mb-8 flex items-start justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900">Fleet Alerts</h1>
+        <p class="mt-1 text-sm text-slate-500">Elevators with high risk score and a failed most recent inspection — sorted by risk score</p>
+      </div>
+      <span class="rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">{{ total }} elevators</span>
+    </div>
+
+    <!-- Alerts table -->
+    <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm table-fixed">
+          <thead class="bg-slate-100 text-slate-600 border-b border-slate-200">
+            <tr>
+              <th class="px-5 py-3 font-semibold w-28">Elevator ID</th>
+              <th class="px-5 py-3 font-semibold w-28">Risk Score</th>
+              <th class="px-5 py-3 font-semibold w-24">Risk Level</th>
+              <th class="px-5 py-3 font-semibold w-40">Last Inspection</th>
+              <th class="px-5 py-3 font-semibold w-48">Outcome</th>
+              <th class="px-5 py-3 font-semibold w-44">Equipment Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alert in alerts %}
+            <tr class="border-b border-slate-100 {{ 'bg-white' if loop.index0 % 2 == 0 else 'bg-slate-50/50' }}">
+              <td class="px-5 py-3 font-mono text-slate-500">{{ alert.elevator_id }}</td>
+              <td class="px-5 py-3 font-mono font-semibold text-red-700">{{ "%.4f"|format(alert.risk_score) }}</td>
+              <td class="px-5 py-3">
+                <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">High</span>
+              </td>
+              <td class="px-5 py-3 font-mono text-xs text-slate-600">{{ alert.last_inspection_date }}</td>
+              <td class="px-5 py-3">
+                <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">{{ alert.last_inspection_outcome }}</span>
+              </td>
+              <td class="px-5 py-3 text-slate-600">{{ alert.equipment_type or '—' }}</td>
+            </tr>
+            {% endfor %}
+            {% if not alerts %}
+            <tr>
+              <td colspan="6" class="px-5 py-10 text-center text-sm text-slate-400">No alerts at this time.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex items-center justify-between border-t border-slate-200 px-5 py-3 bg-slate-50/50 rounded-b-xl">
+        <div class="text-xs text-slate-500">Showing <span class="font-medium text-slate-700">{{ start }}–{{ end }}</span> of <span class="font-medium text-slate-700">{{ total }}</span> alerts</div>
+        <div class="flex items-center gap-2">
+          <a href="/alerts?page={{ page - 1 }}"
+             class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors {{ 'pointer-events-none opacity-40' if page == 1 else '' }}">
+            ← Previous
+          </a>
+          <span class="text-xs text-slate-500 px-1">Page <span class="font-semibold text-slate-700">{{ page }}</span> of {{ total_pages }}</span>
+          <a href="/alerts?page={{ page + 1 }}"
+             class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors {{ 'pointer-events-none opacity-40' if page == total_pages else '' }}">
+            Next →
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>

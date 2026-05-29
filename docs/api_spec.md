@@ -106,6 +106,7 @@ Returns a paginated list of elevators with optional filters.
 | data[].license_status | string |
 | data[].license_expiry_date | string (YYYY-MM-DD) |
 | data[].is_overdue | boolean |
+| data[].risk_level | string (low, medium, high, or empty string if no prediction record exists) |
 | total | integer |
 | page | integer |
 | total_pages | integer |
@@ -121,12 +122,13 @@ Returns a paginated list of elevators with optional filters.
       "city": "Toronto",
       "license_status": "ACTIVE",
       "license_expiry_date": "2017-04-28",
-      "is_overdue": false
+      "is_overdue": false,
+      "risk_level": "medium"
     }
   ],
-  "total": 38284,
+  "total": 43297,
   "page": 1,
-  "total_pages": 1915
+  "total_pages": 4330
 }
 ```
 
@@ -367,6 +369,8 @@ Returns aggregate fleet statistics.
 ```json
 { "error": "predictions not available" }
 ```
+
+**Note:** `by_risk_level` counts only elevators present in `data/predictions.csv`. Elevators with no prediction record are excluded from all three risk buckets. The sum of `by_risk_level` values will therefore be less than `total_elevators` when the predictions file does not cover the full fleet.
 
 **Data sources:** `platform/elevator_fleet.csv` (total count, equipment type via `data/installed.json`), `data/inspection.csv` (pass rate), `data/predictions.csv` (by_risk_level)
 

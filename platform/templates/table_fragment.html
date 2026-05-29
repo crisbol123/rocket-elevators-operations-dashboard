@@ -90,6 +90,7 @@
         </th>
         <th class="px-5 py-3 font-semibold w-24">License Valid</th>
         <th class="px-5 py-3 font-semibold w-32">Insp. Status</th>
+        <th class="px-5 py-3 font-semibold w-24">Risk</th>
       </tr>
     </thead>
     <tbody>
@@ -126,6 +127,17 @@
           <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">Overdue</span>
           {% else %}
           <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">OK</span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3">
+          {% if row.risk_level == 'high' %}
+          <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">High</span>
+          {% elif row.risk_level == 'medium' %}
+          <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">Medium</span>
+          {% elif row.risk_level == 'low' %}
+          <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">Low</span>
+          {% else %}
+          <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-400">—</span>
           {% endif %}
         </td>
       </tr>
@@ -167,7 +179,5 @@
   </div>
 </div>
 
-{# OOB card updates — update summary cards to reflect current filter/search state #}
+{# OOB card update — reflects filtered total from Go API #}
 <div id="card-total" class="mt-2 text-3xl font-bold text-slate-900" hx-swap-oob="true">{{ card_total }}</div>
-<div id="card-active" class="mt-2 text-3xl font-bold text-emerald-600" hx-swap-oob="true">{{ card_active }}</div>
-<div id="card-expired" class="mt-2 text-3xl font-bold text-red-600" hx-swap-oob="true">{{ card_expired }}</div>

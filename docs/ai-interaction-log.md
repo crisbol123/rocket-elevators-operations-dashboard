@@ -465,6 +465,17 @@ Why a skill and not a hook or subagent: it's a deliberate action at a specific m
 What I would change: Call `/sample-endpoint` at the start of Step 1 in `/new-endpoint` so spec examples always come from real data, never from memory.
 
 
+## AND-104 Task 8 — API validation (undocumented risk_level field)
+
+Prompt: "Use /validate-api to verify all six API endpoints against the spec. Document any mismatches and fix them."
+
+What happened: Five of the six endpoints passed cleanly. The only structural mismatch was in `GET /api/elevators`: every item in the response included a `risk_level` field that was not listed in the spec's response schema. The field was added in Task 6 when risk predictions were integrated, but the spec was never updated to reflect it. A second gap was found in `GET /api/fleet/stats`: the spec did not explain why `by_risk_level` counts are lower than `total_elevators` — 2,381 elevators have no prediction record and are silently excluded from the risk buckets.
+
+Both were fixed by updating the spec: `risk_level` was added to the `GET /api/elevators` response table, and a note was added to `GET /api/fleet/stats` explaining the exclusion.
+
+What I would change: When a new field is added to an existing endpoint — even as a small enhancement — the spec should be updated in the same commit. The gap here existed because Task 6 touched the Go handler but not the spec document.
+
+
 ## AND-104 Task 7 — new-endpoint skill (spec insert location)
 
 Prompt: "The skill takes an endpoint name and description as arguments. Its instructions define a multi-step workflow covering spec update, code generation, route registration, and validation."
@@ -474,3 +485,23 @@ What happened: The first version of the skill told Claude to "append at the bott
 What I would change: Whenever a skill edits a file that has known structure, it should name the exact section to insert into, not just "at the end." One extra line in the skill instruction removes an ambiguity that would otherwise produce inconsistent outputs across runs.
 
 
+## AND-104 Task 8 — go_build hook refinement (auto-restart after successful build)
+
+Prompt: "The `go_build.py` hook only builds and makes me restart by hand. Refine it so a successful build automatically restarts the API."
+
+What happened: The `go_build.py` hook compiled the Go API after every edit to a `.go` file, but stopped there. Across Tasks 5, 6, and 7, every successful build required manually running three commands: `pkill`, restart with env vars, and `sleep 2`. That sequence repeated at least five times and was the most mechanical friction in the whole module.
+
+The hook already knew the directory and had just confirmed the build passed — it had everything needed to restart the server. The fix was four lines: kill the old process, spawn the new binary with the right env vars in the background.
+
+What I would change: Nothing — this is the right refinement. The only thing I would have done differently is add it in Task 4 when the hook was first written, since the restart pattern was already established by then.
+
+
+## AND-104 Task 8 — CC extensions assessment
+
+**Most valuable: validate-api**
+
+The `validate-api` skill caught issues I would’ve missed: wrong risk thresholds (0.33/0.66 vs 0.4/0.7) and an undocumented `risk_level` field. Both looked fine until the tool compared the real output against the spec.
+
+**Would design differently: new-endpoint**
+
+We revised it three times (insert location, step order, `sample-endpoint`). Next time I’d run the workflow manually first, then write the skill, so every endpoint follows the same process.
