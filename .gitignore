@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 .venv/
 platform/api/rocket-elevators-api
+.env
