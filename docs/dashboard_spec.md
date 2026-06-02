@@ -508,3 +508,138 @@ A spinner icon appears in the table section header whenever a table request is i
 - The spinner disappears when the response is received and the table updates.
 - The spinner does not appear when clicking a table row to open the detail panel.
 
+---
+
+## AND-105 Task 2: Relational Data Model
+
+### 1. Tables
+
+#### `elevators`
+Sources: `data/license.csv` (all rows), `data/installed.json`
+
+| Column | Type | Constraints |
+|---|---|---|
+| elevator_id | INTEGER | PRIMARY KEY |
+| location | TEXT | |
+| city | TEXT | |
+| license_number | TEXT | NOT NULL |
+| license_status | TEXT | NOT NULL |
+| license_expiry_date | DATE | |
+| license_holder | TEXT | |
+| device_type | TEXT | |
+| device_status | TEXT | |
+
+**Primary key:** `elevator_id` maps to `ElevatingDevicesNumber`, the regulator-assigned identifier that appears as the join key in every other dataset.
+
+**Normalization:** `device_type` and `device_status` come from `installed.json` but are stored on `elevators` because the relationship is 1-1 — the API looks up one device record per elevator ID and treats them as attributes of the elevator, not as a separate entity. Billing columns (`BILLINGCUSTOMER`, `BILLINGADDRESS`, `BILLINGACCOUNT`) and holder address are excluded — they contain "data redacted" values and are not used by any dashboard query. `city` is derived from the `location` string during ETL (extracted by `prepare_data.py`) and stored as a dedicated column because the API exposes it as a separate field.
+
+**Indexes:** `license_status` (filtered in list queries), `license_expiry_date` (used in expiry queries).
+
+---
+
+#### `inspections`
+Source: `data/inspection.csv`
+
+| Column | Type | Constraints |
+|---|---|---|
+| inspection_number | INTEGER | PRIMARY KEY |
+| elevator_id | INTEGER | FK → elevators(elevator_id) ON DELETE SET NULL |
+| inspection_type | TEXT | NOT NULL |
+| latest_inspection_date | DATE | NOT NULL |
+| outcome | TEXT | NOT NULL |
+| location | TEXT | |
+
+**Primary key:** `InspectionNumber` is the regulator-assigned identifier for each inspection event.
+
+**Normalization:** `InspectionLocation` is kept on the inspection record rather than derived from `elevators.location` because inspection location can differ from the license address. `originatingservicerequestnumber` and `InspectionCustomer` are excluded — the API does not use them in any endpoint.
+
+**ON DELETE SET NULL:** Some inspection records reference elevator IDs not present in `license.csv`. Setting `elevator_id` to NULL on orphan rows preserves the inspection history without requiring a matching elevator record.
+
+**Indexes:** `elevator_id` (join to elevators and count queries), `latest_inspection_date` (overdue calculation), `outcome` (pass rate calculation in `/api/fleet/stats`).
+
+---
+
+#### `incidents`
+Source: `data/incident.json`
+
+| Column | Type | Constraints |
+|---|---|---|
+| incident_number | TEXT | PRIMARY KEY |
+| elevator_id | INTEGER | FK → elevators(elevator_id) ON DELETE SET NULL |
+| date_of_occurrence | DATE | |
+| category | TEXT | |
+| root_cause | TEXT | |
+| narrative | TEXT | |
+
+**Primary key:** `Incident Number` is the regulator's identifier for each incident report.
+
+**Normalization:** The API uses incidents only as a count per elevator (`incident_count` in the detail response). All detail columns are stored for future use but the dashboard currently only queries `COUNT(*) GROUP BY elevator_id`. The 22 individual injury-type boolean columns from the source are excluded — they are not used by any current endpoint and adding 22 sparse columns for a count-only use case is not justified.
+
+**Indexes:** `elevator_id` (count query in detail endpoint).
+
+---
+
+#### `alterations`
+Source: `data/altered.json`
+
+| Column | Type | Constraints |
+|---|---|---|
+| service_request_number | INTEGER | PRIMARY KEY |
+| elevator_id | INTEGER | FK → elevators(elevator_id) ON DELETE SET NULL |
+| alteration_type | TEXT | |
+| status | TEXT | |
+| summary | TEXT | |
+
+**Primary key:** `originating service request number` is the unique identifier per alteration request.
+
+**Normalization:** The API uses alterations only as a count per elevator (`alteration_count` in the detail response). `Alteration contractor name` and `Billing Customer` are excluded — not used by any endpoint.
+
+**Indexes:** `elevator_id` (count query in detail endpoint).
+
+---
+
+#### `predictions`
+Source: `data/predictions.csv`
+
+| Column | Type | Constraints |
+|---|---|---|
+| elevator_id | INTEGER | PRIMARY KEY, FK → elevators(elevator_id) ON DELETE CASCADE |
+| risk_score | NUMERIC(5,4) | NOT NULL |
+| risk_level | TEXT | NOT NULL |
+| model_version | TEXT | NOT NULL |
+| prediction_date | DATE | NOT NULL |
+| risk_explanation | TEXT | |
+
+**Primary key:** `elevator_id` — the table holds one prediction per elevator. Using `elevator_id` as the primary key enforces that constraint at the schema level.
+
+**`risk_level`:** Computed by the API from `risk_score` using thresholds (< 0.4 → low, < 0.7 → medium, ≥ 0.7 → high) and stored for direct querying without recomputing on read.
+
+**ON DELETE CASCADE:** A prediction has no meaning without its elevator.
+
+**`risk_explanation`:** Nullable TEXT column added for Task 6. NULL until the LLM explanation pipeline runs.
+
+**Indexes:** `risk_level` (filtered in `/api/fleet/stats` and `/api/fleet/alerts`), `risk_score` (sorted in alert views).
+
+---
+
+### 2. Relationships
+
+| Relationship | Cardinality | Join columns | Orphan behavior |
+|---|---|---|---|
+| elevators → inspections | one-to-many | `elevators.elevator_id = inspections.elevator_id` | `elevator_id` set to NULL — inspection history preserved |
+| elevators → incidents | one-to-many | `elevators.elevator_id = incidents.elevator_id` | `elevator_id` set to NULL — incident record preserved |
+| elevators → alterations | one-to-many | `elevators.elevator_id = alterations.elevator_id` | `elevator_id` set to NULL — alteration record preserved |
+| elevators → predictions | one-to-one | `elevators.elevator_id = predictions.elevator_id` | CASCADE delete — prediction has no meaning without its elevator |
+
+---
+
+### 3. Data Source Mapping
+
+| Table | Source file | Key transformations |
+|---|---|---|
+| elevators | `data/license.csv`, `data/installed.json` | All 45,383 rows loaded; `ElevatingDevicesNumber` → INTEGER; `LICENSEEXPIRYDATE` parsed from `28-Apr-17` format → DATE; `location` formatted and `city` extracted from `LocationoftheElevatingDevice` using the same logic as `prepare_data.py`; `device_type` / `device_status` joined from `installed.json` on elevator_id |
+| inspections | `data/inspection.csv` | `Latest_INSPECTION_Date` parsed from `M/D/YYYY` → DATE; `originatingservicerequestnumber` and `InspectionCustomer` excluded |
+| incidents | `data/incident.json` | `Date Of Occurrence` → DATE; `elevating devices number` → `elevator_id` INTEGER; 22 injury-type columns excluded |
+| alterations | `data/altered.json` | `Elevating Devices Number` → `elevator_id` INTEGER; `Alteration contractor name` and `Billing Customer` excluded |
+| predictions | `data/predictions.csv` | `prediction_date` → DATE; `risk_score` → NUMERIC(5,4); `risk_level` stored (computed by API logic); `risk_explanation` added as NULL column (not in source) |
+
