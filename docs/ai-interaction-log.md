@@ -482,6 +482,8 @@ What happened: Five of the six endpoints passed cleanly. The only structural mis
 Both were fixed by updating the spec: `risk_level` was added to the `GET /api/elevators` response table, and a note was added to `GET /api/fleet/stats` explaining the exclusion.
 
 What I would change: When a new field is added to an existing endpoint — even as a small enhancement — the spec should be updated in the same commit. The gap here existed because Task 6 touched the Go handler but not the spec document.
+
+
 ## AND-104 Task 8 — go_build hook refinement (auto-restart after successful build)
 
 Prompt: "The `go_build.py` hook only builds and makes me restart by hand. Refine it so a successful build automatically restarts the API."
@@ -500,6 +502,9 @@ The build-and-restart behavior lives in a hook because it has to fire automatica
 ## AND-104 Task 8 — validate-api as subagent inside a skill (mechanism choice)
 
 I could have made `validate-api` a bash script that just curls the endpoint and diffs the output. I didn't because validation requires judgment — comparing field types, interpreting edge cases, deciding what counts as a mismatch. That's reasoning work, not shell work. A subagent can do that; a script can't. The skill is just the trigger that hands off to the subagent with the right context.
+
+
+
 ## AND-104 Task 8 — CC extensions assessment
 
 **Most valuable: validate-api**
@@ -509,3 +514,19 @@ The `validate-api` skill caught issues I would’ve missed: wrong risk threshold
 **Would design differently: new-endpoint**
 
 We revised it three times (insert location, step order, `sample-endpoint`). Next time I’d run the workflow manually first, then write the skill, so every endpoint follows the same process.
+
+
+
+## AND-105 Task 1 — Docker directives that were new to me
+
+Pretty much everything in this task was new. I had never written a `docker-compose.yml` before so `services`, `depends_on`, `build`, and the whole volume syntax were things I was reading for the first time. The multi-stage Dockerfile was also new — I didn't know you could use two `FROM` blocks in the same file to separate the build environment from the runtime image.
+
+
+## AND-105 Task 1 — What Claude generated vs what I fixed
+
+Claude generated everything: the `docker-compose.yml`, the `Dockerfile`, the `.env`, and the `.gitignore` update. I made two corrections. The first was the Go image version — Claude picked `golang:1.23-alpine` but `go.mod` required 1.26.3, so the build failed and I bumped it to `golang:1.26-alpine`. The second was the `elevator_fleet.csv` mount — the API crashed on startup because that file lives in `platform/` not `data/`, so I added a separate volume entry and the right env var to point the API at it.
+
+
+## AND-105 Task 1 — What I learned reading the config
+
+The thing that surprised me most was that volumes have to be declared in two places — once inside the service to actually mount them, and once at the root level so Docker knows the volume exists. It felt redundant at first but the analogy that made it click was: you have to create the disk before you can plug it in. I also didn't know Alpine was a full Linux capable of running a Go binary — I assumed you needed something bigger. And the `CMD` instruction makes sense now: a container is just a process, so without a command it starts and immediately stops because there's nothing to run.
