@@ -1,4 +1,4 @@
-CREATE TABLE elevators (
+CREATE TABLE IF NOT EXISTS elevators (
     elevator_id          INTEGER     PRIMARY KEY,
     location             TEXT,
     city                 TEXT,
@@ -14,7 +14,7 @@ CREATE INDEX idx_elevators_license_status    ON elevators (license_status);
 CREATE INDEX idx_elevators_license_expiry    ON elevators (license_expiry_date);
 
 
-CREATE TABLE inspections (
+CREATE TABLE IF NOT EXISTS inspections (
     inspection_number       INTEGER     PRIMARY KEY,
     elevator_id             INTEGER     REFERENCES elevators (elevator_id) ON DELETE SET NULL,
     inspection_type         TEXT        NOT NULL,
@@ -28,7 +28,7 @@ CREATE INDEX idx_inspections_latest_inspection_date ON inspections (latest_inspe
 CREATE INDEX idx_inspections_outcome                ON inspections (outcome);
 
 
-CREATE TABLE incidents (
+CREATE TABLE IF NOT EXISTS incidents (
     incident_number    TEXT    PRIMARY KEY,
     elevator_id        INTEGER REFERENCES elevators (elevator_id) ON DELETE SET NULL,
     date_of_occurrence DATE,
@@ -40,7 +40,7 @@ CREATE TABLE incidents (
 CREATE INDEX idx_incidents_elevator_id ON incidents (elevator_id);
 
 
-CREATE TABLE alterations (
+CREATE TABLE IF NOT EXISTS alterations (
     service_request_number  INTEGER PRIMARY KEY,
     elevator_id             INTEGER REFERENCES elevators (elevator_id) ON DELETE SET NULL,
     alteration_type         TEXT,
@@ -51,7 +51,7 @@ CREATE TABLE alterations (
 CREATE INDEX idx_alterations_elevator_id ON alterations (elevator_id);
 
 
-CREATE TABLE predictions (
+CREATE TABLE IF NOT EXISTS predictions (
     elevator_id       INTEGER         PRIMARY KEY REFERENCES elevators (elevator_id) ON DELETE CASCADE,
     risk_score        NUMERIC(5,4)    NOT NULL,
     risk_level        TEXT            NOT NULL,

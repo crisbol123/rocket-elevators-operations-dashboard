@@ -530,3 +530,18 @@ Claude generated everything: the `docker-compose.yml`, the `Dockerfile`, the `.e
 ## AND-105 Task 1 — What I learned reading the config
 
 The thing that surprised me most was that volumes have to be declared in two places — once inside the service to actually mount them, and once at the root level so Docker knows the volume exists. It felt redundant at first but the analogy that made it click was: you have to create the disk before you can plug it in. I also didn't know Alpine was a full Linux capable of running a Go binary — I assumed you needed something bigger. And the `CMD` instruction makes sense now: a container is just a process, so without a command it starts and immediately stops because there's nothing to run.
+
+
+## AND-105 Task 3 — Foreign key errors during ETL
+
+Claude generated the ETL without accounting for orphan IDs — elevator references in inspections that don't exist in `license.csv`. It only caught the problem when the script crashed. I asked what happened and we traced it: 145 elevator IDs appear in the inspection dataset but have no license record. Claude fixed it by loading valid IDs first and setting `elevator_id` to NULL for orphans, or skipping the row entirely in predictions where NULL isn't allowed.
+
+
+## AND-105 Task 3 — Why license.csv is the right source for elevators
+
+Claude hadn't flagged that `generate_predictions.ipynb` scores 40,916 elevators but only 40,771 made it into the DB. I noticed the gap in the summary and asked about it. Turned out those 145 come from the inspection-based feature matrix, not from `license.csv`. I confirmed that keeping `license.csv` as the source is correct — the dashboard is a compliance tool and elevators without a license don't belong in it.
+
+
+## AND-105 Task 3 — What ON CONFLICT DO NOTHING actually does
+
+I hadn't seen this SQL pattern before. Claude used it in every INSERT but didn't explain it upfront. I asked and the short version is: if you try to insert a row whose primary key already exists, Postgres silently ignores it instead of throwing an error. That's what makes the ETL safe to re-run without duplicate key crashes.

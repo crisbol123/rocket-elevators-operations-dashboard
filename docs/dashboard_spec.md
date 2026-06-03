@@ -641,5 +641,5 @@ Source: `data/predictions.csv`
 | inspections | `data/inspection.csv` | `Latest_INSPECTION_Date` parsed from `M/D/YYYY` → DATE; `originatingservicerequestnumber` and `InspectionCustomer` excluded |
 | incidents | `data/incident.json` | `Date Of Occurrence` → DATE; `elevating devices number` → `elevator_id` INTEGER; 22 injury-type columns excluded |
 | alterations | `data/altered.json` | `Elevating Devices Number` → `elevator_id` INTEGER; `Alteration contractor name` and `Billing Customer` excluded |
-| predictions | `data/predictions.csv` | `prediction_date` → DATE; `risk_score` → NUMERIC(5,4); `risk_level` stored (computed by API logic); `risk_explanation` added as NULL column (not in source) |
+| predictions | `data/predictions.csv` | `prediction_date` → DATE; `risk_score` → NUMERIC(5,4); `risk_level` read directly from source CSV and stored as-is; `risk_explanation` added as NULL column (not in source) |
 
