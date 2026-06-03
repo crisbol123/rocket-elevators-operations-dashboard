@@ -1,49 +1,18 @@
+// AND-105 Task 4: Go Database Integration
+
 package main
 
 import (
-	"encoding/csv"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
-	"strings"
-	"time"
+
+	"github.com/jackc/pgx/v5"
 )
-
-// --- Data types ---
-
-type fleetRow struct {
-	elevatorID        int
-	location          string
-	city              string
-	licenseNumber     string
-	licenseStatus     string
-	licenseExpiryDate time.Time
-	expiryISO         string
-}
-
-type installedRow struct {
-	deviceType   string
-	deviceStatus string
-}
-
-type inspectionRow struct {
-	inspectionID int
-	typ          string
-	date         time.Time
-	dateISO      string
-	outcome      string
-	location     string
-}
-
-type riskRow struct {
-	riskScore   float64
-	riskLevel   string
-	predictedAt string
-}
 
 // --- Response types ---
 
@@ -113,279 +82,6 @@ type fleetAlertItem struct {
 	EquipmentType         string  `json:"equipment_type"`
 }
 
-// --- Global state ---
-
-var (
-	fleet       []fleetRow
-	fleetIndex  map[int]int
-	installed   map[int]installedRow
-	alterations map[int]int
-	incidents   map[int]int
-	inspByID    map[int][]inspectionRow
-	overdueIDs  map[int]bool
-	riskByID    map[int]riskRow
-)
-
-// --- Path helpers ---
-
-func dataDir() string {
-	if d := os.Getenv("DATA_DIR"); d != "" {
-		return d
-	}
-	return "../../data"
-}
-
-func fleetCSV() string {
-	if p := os.Getenv("FLEET_CSV"); p != "" {
-		return p
-	}
-	return "../elevator_fleet.csv"
-}
-
-// --- Data loading ---
-
-func colIdx(headers []string) map[string]int {
-	m := make(map[string]int, len(headers))
-	for i, h := range headers {
-		m[h] = i
-	}
-	return m
-}
-
-func asInt(v any) int {
-	switch n := v.(type) {
-	case float64:
-		return int(n)
-	}
-	return 0
-}
-
-func asStr(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
-
-func loadFleet() error {
-	f, err := os.Open(fleetCSV())
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-	headers, err := r.Read()
-	if err != nil {
-		return err
-	}
-	idx := colIdx(headers)
-
-	for {
-		rec, err := r.Read()
-		if err != nil {
-			break
-		}
-		id, _ := strconv.Atoi(rec[idx["elevator_id"]])
-		expiry, _ := time.Parse("02-Jan-06", rec[idx["license_expiry_date"]])
-		var expiryISO string
-		if !expiry.IsZero() {
-			expiryISO = expiry.Format("2006-01-02")
-		}
-		fleet = append(fleet, fleetRow{
-			elevatorID:        id,
-			location:          rec[idx["location"]],
-			city:              rec[idx["city"]],
-			licenseNumber:     rec[idx["license_number"]],
-			licenseStatus:     rec[idx["license_status"]],
-			licenseExpiryDate: expiry,
-			expiryISO:         expiryISO,
-		})
-	}
-
-	fleetIndex = make(map[int]int, len(fleet))
-	for i, row := range fleet {
-		fleetIndex[row.elevatorID] = i
-	}
-	return nil
-}
-
-func loadInstalled() error {
-	f, err := os.Open(dataDir() + "/installed.json")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	var raw []map[string]any
-	if err := json.NewDecoder(f).Decode(&raw); err != nil {
-		return err
-	}
-
-	installed = make(map[int]installedRow, len(raw))
-	for _, item := range raw {
-		id := asInt(item["Elevating devices number"])
-		installed[id] = installedRow{
-			deviceType:   asStr(item["Device Type"]),
-			deviceStatus: asStr(item["DeviceStatus"]),
-		}
-	}
-	return nil
-}
-
-func loadAlterations() error {
-	f, err := os.Open(dataDir() + "/altered.json")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	var raw []map[string]any
-	if err := json.NewDecoder(f).Decode(&raw); err != nil {
-		return err
-	}
-
-	alterations = make(map[int]int)
-	for _, item := range raw {
-		id := asInt(item["Elevating Devices Number"])
-		alterations[id]++
-	}
-	return nil
-}
-
-func loadIncidents() error {
-	f, err := os.Open(dataDir() + "/incident.json")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	var raw []map[string]any
-	if err := json.NewDecoder(f).Decode(&raw); err != nil {
-		return err
-	}
-
-	incidents = make(map[int]int)
-	for _, item := range raw {
-		id := asInt(item["elevating devices number"])
-		incidents[id]++
-	}
-	return nil
-}
-
-func loadInspections() error {
-	f, err := os.Open(dataDir() + "/inspection.csv")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-	headers, err := r.Read()
-	if err != nil {
-		return err
-	}
-	idx := colIdx(headers)
-
-	inspByID = make(map[int][]inspectionRow)
-	for {
-		rec, err := r.Read()
-		if err != nil {
-			break
-		}
-		elevID, _ := strconv.Atoi(rec[idx["ElevatingDevicesNumber"]])
-		inspID, _ := strconv.Atoi(rec[idx["InspectionNumber"]])
-		date, _ := time.Parse("1/2/2006", rec[idx["Latest_INSPECTION_Date"]])
-		var dateISO string
-		if !date.IsZero() {
-			dateISO = date.Format("2006-01-02")
-		}
-		inspByID[elevID] = append(inspByID[elevID], inspectionRow{
-			inspectionID: inspID,
-			typ:          rec[idx["InspectionType"]],
-			date:         date,
-			dateISO:      dateISO,
-			outcome:      rec[idx["InspectionOutcome"]],
-			location:     rec[idx["InspectionLocation"]],
-		})
-	}
-
-	cutoff := time.Now().AddDate(-1, 0, 0)
-	overdueIDs = make(map[int]bool)
-
-	for id, rows := range inspByID {
-		sort.Slice(rows, func(i, j int) bool {
-			return rows[i].date.After(rows[j].date)
-		})
-		inspByID[id] = rows
-		if rows[0].date.Before(cutoff) {
-			overdueIDs[id] = true
-		}
-	}
-	return nil
-}
-
-func loadPredictions() {
-	f, err := os.Open(dataDir() + "/predictions.csv")
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-	headers, err := r.Read()
-	if err != nil {
-		return
-	}
-	idx := colIdx(headers)
-
-	riskByID = make(map[int]riskRow)
-	for {
-		rec, err := r.Read()
-		if err != nil {
-			break
-		}
-		id, _ := strconv.Atoi(rec[idx["elevator_id"]])
-		score, _ := strconv.ParseFloat(rec[idx["risk_score"]], 64)
-		riskByID[id] = riskRow{
-			riskScore:   score,
-			riskLevel:   computeRiskLevel(score),
-			predictedAt: rec[idx["prediction_date"]],
-		}
-	}
-}
-
-func computeRiskLevel(score float64) string {
-	if score < 0.4 {
-		return "low"
-	}
-	if score < 0.7 {
-		return "medium"
-	}
-	return "high"
-}
-
-func loadData() {
-	loaders := []struct {
-		name string
-		fn   func() error
-	}{
-		{"fleet", loadFleet},
-		{"installed", loadInstalled},
-		{"alterations", loadAlterations},
-		{"incidents", loadIncidents},
-		{"inspections", loadInspections},
-	}
-	for _, l := range loaders {
-		if err := l.fn(); err != nil {
-			fmt.Fprintf(os.Stderr, "error loading %s: %v\n", l.name, err)
-			os.Exit(1)
-		}
-	}
-	loadPredictions() // non-fatal — forward dependency on Task 6
-	fmt.Printf("Loaded %d elevators\n", len(fleet))
-}
-
 // --- Handlers ---
 
 func handleListElevators(w http.ResponseWriter, r *http.Request) {
@@ -429,7 +125,7 @@ func handleListElevators(w http.ResponseWriter, r *http.Request) {
 	}
 
 	searchID := q.Get("search_id")
-	searchLoc := strings.ToLower(q.Get("search_location"))
+	searchLoc := q.Get("search_location")
 
 	sortBy := q.Get("sort_by")
 	if sortBy == "" {
@@ -449,70 +145,76 @@ func handleListElevators(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now()
-	var filtered []fleetRow
-	for _, row := range fleet {
-		if status != "all" && row.licenseStatus != status {
-			continue
-		}
-		if expired == "yes" && !row.licenseExpiryDate.Before(now) {
-			continue
-		}
-		if expired == "no" && row.licenseExpiryDate.Before(now) {
-			continue
-		}
-		if inspection == "overdue" && !overdueIDs[row.elevatorID] {
-			continue
-		}
-		if inspection == "ok" && overdueIDs[row.elevatorID] {
-			continue
-		}
-		if searchID != "" && !strings.HasPrefix(strconv.Itoa(row.elevatorID), searchID) {
-			continue
-		}
-		if searchLoc != "" && !strings.Contains(strings.ToLower(row.location), searchLoc) {
-			continue
-		}
-		filtered = append(filtered, row)
+	// sortBy and sortDir are validated against a whitelist — safe to interpolate
+	orderCol := "e.elevator_id"
+	if sortBy == "license_expiry_date" {
+		orderCol = "e.license_expiry_date"
 	}
 
-	sort.SliceStable(filtered, func(i, j int) bool {
-		asc := sortDir == "asc"
-		if sortBy == "license_expiry_date" {
-			if asc {
-				return filtered[i].licenseExpiryDate.Before(filtered[j].licenseExpiryDate)
-			}
-			return filtered[i].licenseExpiryDate.After(filtered[j].licenseExpiryDate)
+	query := `
+		WITH latest_insp AS (
+			SELECT elevator_id, MAX(latest_inspection_date) AS last_date
+			FROM inspections
+			GROUP BY elevator_id
+		)
+		SELECT
+			e.elevator_id,
+			COALESCE(e.location, '')                                    AS location,
+			COALESCE(e.city, '')                                        AS city,
+			e.license_status,
+			COALESCE(e.license_expiry_date::text, '')                   AS license_expiry_date,
+			COALESCE(p.risk_level, '')                                  AS risk_level,
+			COALESCE(li.last_date < NOW() - INTERVAL '1 year', false)   AS is_overdue,
+			COUNT(*) OVER()                                             AS total_count
+		FROM elevators e
+		LEFT JOIN predictions p  ON p.elevator_id  = e.elevator_id
+		LEFT JOIN latest_insp li ON li.elevator_id = e.elevator_id
+		WHERE
+			($1 = 'all' OR e.license_status = $1)
+			AND ($2 = 'all'
+				OR ($2 = 'yes' AND e.license_expiry_date < NOW())
+				OR ($2 = 'no'  AND (e.license_expiry_date IS NULL OR e.license_expiry_date >= NOW())))
+			AND ($3 = 'all'
+				OR ($3 = 'overdue' AND     COALESCE(li.last_date < NOW() - INTERVAL '1 year', false))
+				OR ($3 = 'ok'      AND NOT COALESCE(li.last_date < NOW() - INTERVAL '1 year', false)))
+			AND ($4 = '' OR e.elevator_id::text LIKE $4 || '%')
+			AND ($5 = '' OR LOWER(COALESCE(e.location, '')) LIKE '%' || LOWER($5) || '%')
+		ORDER BY ` + orderCol + ` ` + sortDir + `
+		LIMIT 10 OFFSET $6`
+
+	ctx := context.Background()
+	dbRows, err := db.Query(ctx, query, status, expired, inspection, searchID, searchLoc, (page-1)*10)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer dbRows.Close()
+
+	var items []listItem
+	var total int
+	for dbRows.Next() {
+		var item listItem
+		if err := dbRows.Scan(
+			&item.ElevatorID, &item.Location, &item.City,
+			&item.LicenseStatus, &item.LicenseExpiryDate,
+			&item.RiskLevel, &item.IsOverdue, &total,
+		); err != nil {
+			writeErr(w, http.StatusInternalServerError, "database error")
+			return
 		}
-		if asc {
-			return filtered[i].elevatorID < filtered[j].elevatorID
-		}
-		return filtered[i].elevatorID > filtered[j].elevatorID
-	})
+		items = append(items, item)
+	}
+	if items == nil {
+		items = []listItem{}
+	}
 
 	const pageSize = 10
-	total := len(filtered)
 	totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
 	if totalPages < 1 {
 		totalPages = 1
 	}
 	if page > totalPages {
 		page = totalPages
-	}
-	start := (page - 1) * pageSize
-	end := min(start+pageSize, total)
-
-	items := make([]listItem, 0, end-start)
-	for _, row := range filtered[start:end] {
-		items = append(items, listItem{
-			ElevatorID:        row.elevatorID,
-			Location:          row.location,
-			City:              row.city,
-			LicenseStatus:     row.licenseStatus,
-			LicenseExpiryDate: row.expiryISO,
-			IsOverdue:         overdueIDs[row.elevatorID],
-			RiskLevel:         riskByID[row.elevatorID].riskLevel,
-		})
 	}
 
 	writeJSON(w, http.StatusOK, listResponse{
@@ -528,26 +230,44 @@ func handleGetElevator(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	i, exists := fleetIndex[id]
-	if !exists {
+
+	ctx := context.Background()
+	var resp detailResponse
+	err := db.QueryRow(ctx, `
+		SELECT
+			e.elevator_id,
+			COALESCE(e.location, '')                                    AS location,
+			COALESCE(e.city, '')                                        AS city,
+			COALESCE(e.license_number, '')                              AS license_number,
+			e.license_status,
+			COALESCE(e.license_expiry_date::text, '')                   AS license_expiry_date,
+			COALESCE(e.device_type, '')                                 AS device_type,
+			COALESCE(e.device_status, '')                               AS device_status,
+			COUNT(a.service_request_number)                             AS alteration_count,
+			COUNT(i.incident_number)                                    AS incident_count,
+			COALESCE(MAX(insp.latest_inspection_date) < NOW() - INTERVAL '1 year', false) AS is_overdue
+		FROM elevators e
+		LEFT JOIN alterations  a    ON a.elevator_id    = e.elevator_id
+		LEFT JOIN incidents    i    ON i.elevator_id    = e.elevator_id
+		LEFT JOIN inspections  insp ON insp.elevator_id = e.elevator_id
+		WHERE e.elevator_id = $1
+		GROUP BY e.elevator_id, e.location, e.city, e.license_number, e.license_status,
+		         e.license_expiry_date, e.device_type, e.device_status
+	`, id).Scan(
+		&resp.ElevatorID, &resp.Location, &resp.City,
+		&resp.LicenseNumber, &resp.LicenseStatus, &resp.LicenseExpiryDate,
+		&resp.DeviceType, &resp.DeviceStatus,
+		&resp.AlterationCount, &resp.IncidentCount, &resp.IsOverdue,
+	)
+	if err == pgx.ErrNoRows {
 		writeErr(w, http.StatusNotFound, fmt.Sprintf("elevator %d not found", id))
 		return
 	}
-	row := fleet[i]
-	inst := installed[id]
-	writeJSON(w, http.StatusOK, detailResponse{
-		ElevatorID:        row.elevatorID,
-		Location:          row.location,
-		City:              row.city,
-		LicenseNumber:     row.licenseNumber,
-		LicenseStatus:     row.licenseStatus,
-		LicenseExpiryDate: row.expiryISO,
-		DeviceType:        inst.deviceType,
-		DeviceStatus:      inst.deviceStatus,
-		AlterationCount:   alterations[id],
-		IncidentCount:     incidents[id],
-		IsOverdue:         overdueIDs[id],
-	})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func handleGetInspections(w http.ResponseWriter, r *http.Request) {
@@ -555,20 +275,43 @@ func handleGetInspections(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, exists := fleetIndex[id]; !exists {
+
+	ctx := context.Background()
+	exists, err := elevatorExists(ctx, id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if !exists {
 		writeErr(w, http.StatusNotFound, fmt.Sprintf("elevator %d not found", id))
 		return
 	}
-	rows := inspByID[id]
-	result := make([]inspectionResponse, 0, len(rows))
-	for _, row := range rows {
-		result = append(result, inspectionResponse{
-			InspectionID: row.inspectionID,
-			Type:         row.typ,
-			Date:         row.dateISO,
-			Outcome:      row.outcome,
-			Location:     row.location,
-		})
+
+	rows, err := db.Query(ctx, `
+		SELECT
+			inspection_number,
+			COALESCE(inspection_type, '') AS type,
+			latest_inspection_date::text  AS date,
+			outcome,
+			COALESCE(location, '')        AS location
+		FROM inspections
+		WHERE elevator_id = $1
+		ORDER BY latest_inspection_date DESC
+	`, id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer rows.Close()
+
+	result := []inspectionResponse{}
+	for rows.Next() {
+		var insp inspectionResponse
+		if err := rows.Scan(&insp.InspectionID, &insp.Type, &insp.Date, &insp.Outcome, &insp.Location); err != nil {
+			writeErr(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		result = append(result, insp)
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -578,65 +321,95 @@ func handleGetRisk(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, exists := fleetIndex[id]; !exists {
+
+	ctx := context.Background()
+	exists, err := elevatorExists(ctx, id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if !exists {
 		writeErr(w, http.StatusNotFound, fmt.Sprintf("elevator %d not found", id))
 		return
 	}
-	if riskByID == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(errResponse{Error: "predictions not available"})
+
+	var resp riskResponse
+	err = db.QueryRow(ctx, `
+		SELECT elevator_id, risk_score, risk_level, prediction_date::text
+		FROM predictions
+		WHERE elevator_id = $1
+	`, id).Scan(&resp.ElevatorID, &resp.RiskScore, &resp.RiskLevel, &resp.PredictedAt)
+	if err == pgx.ErrNoRows {
+		var count int
+		db.QueryRow(ctx, "SELECT COUNT(*) FROM predictions").Scan(&count)
+		if count == 0 {
+			writeErr(w, http.StatusServiceUnavailable, "predictions not available")
+		} else {
+			writeErr(w, http.StatusNotFound, fmt.Sprintf("no risk prediction found for elevator %d", id))
+		}
 		return
 	}
-	risk, exists := riskByID[id]
-	if !exists {
-		writeErr(w, http.StatusNotFound, fmt.Sprintf("no risk prediction found for elevator %d", id))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "database error")
 		return
 	}
-	writeJSON(w, http.StatusOK, riskResponse{
-		ElevatorID:  id,
-		RiskScore:   risk.riskScore,
-		RiskLevel:   risk.riskLevel,
-		PredictedAt: risk.predictedAt,
-	})
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func handleFleetStats(w http.ResponseWriter, r *http.Request) {
-	if riskByID == nil {
+	ctx := context.Background()
+
+	var predCount int
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM predictions").Scan(&predCount); err != nil || predCount == 0 {
 		writeErr(w, http.StatusServiceUnavailable, "predictions not available")
 		return
 	}
 
-	byRiskLevel := map[string]int{"high": 0, "medium": 0, "low": 0}
-	for _, row := range riskByID {
-		byRiskLevel[row.riskLevel]++
-	}
+	var totalElevators int
+	db.QueryRow(ctx, "SELECT COUNT(*) FROM elevators").Scan(&totalElevators)
 
-	var total, passed int
-	for _, rows := range inspByID {
-		for _, row := range rows {
-			total++
-			if row.outcome == "Passed" {
-				passed++
-			}
+	byRiskLevel := map[string]int{"high": 0, "medium": 0, "low": 0}
+	riskRows, err := db.Query(ctx, "SELECT risk_level, COUNT(*) FROM predictions GROUP BY risk_level")
+	if err == nil {
+		defer riskRows.Close()
+		for riskRows.Next() {
+			var level string
+			var count int
+			riskRows.Scan(&level, &count)
+			byRiskLevel[level] = count
 		}
 	}
+
+	var passed, inspTotal int
+	db.QueryRow(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE outcome = 'Passed'),
+			COUNT(*)
+		FROM inspections
+	`).Scan(&passed, &inspTotal)
 	var passRate float64
-	if total > 0 {
-		passRate = math.Round(float64(passed)/float64(total)*10000) / 10000
+	if inspTotal > 0 {
+		passRate = math.Round(float64(passed)/float64(inspTotal)*10000) / 10000
 	}
 
 	byEquipmentType := make(map[string]int)
-	for _, row := range fleet {
-		dt := installed[row.elevatorID].deviceType
-		if dt == "" {
-			dt = "Unknown"
+	typeRows, err := db.Query(ctx, `
+		SELECT COALESCE(NULLIF(TRIM(device_type), ''), 'Unknown'), COUNT(*)
+		FROM elevators
+		GROUP BY 1
+	`)
+	if err == nil {
+		defer typeRows.Close()
+		for typeRows.Next() {
+			var dtype string
+			var count int
+			typeRows.Scan(&dtype, &count)
+			byEquipmentType[dtype] = count
 		}
-		byEquipmentType[dt]++
 	}
 
 	writeJSON(w, http.StatusOK, fleetStatsResponse{
-		TotalElevators:     len(fleet),
+		TotalElevators:     totalElevators,
 		ByRiskLevel:        byRiskLevel,
 		InspectionPassRate: passRate,
 		ByEquipmentType:    byEquipmentType,
@@ -644,47 +417,64 @@ func handleFleetStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleFleetAlerts(w http.ResponseWriter, r *http.Request) {
-	if riskByID == nil {
+	ctx := context.Background()
+
+	var predCount int
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM predictions").Scan(&predCount); err != nil || predCount == 0 {
 		writeErr(w, http.StatusServiceUnavailable, "predictions not available")
 		return
 	}
 
-	var alerts []fleetAlertItem
-	for _, row := range fleet {
-		risk, hasRisk := riskByID[row.elevatorID]
-		if !hasRisk || risk.riskLevel != "high" {
-			continue
-		}
-		rows := inspByID[row.elevatorID]
-		if len(rows) == 0 {
-			continue
-		}
-		latest := rows[0] // already sorted date desc by loadInspections
-		if latest.outcome == "Passed" {
-			continue
-		}
-		alerts = append(alerts, fleetAlertItem{
-			ElevatorID:            row.elevatorID,
-			RiskScore:             risk.riskScore,
-			RiskLevel:             risk.riskLevel,
-			LastInspectionDate:    latest.dateISO,
-			LastInspectionOutcome: latest.outcome,
-			EquipmentType:         installed[row.elevatorID].deviceType,
-		})
+	rows, err := db.Query(ctx, `
+		WITH latest_insp AS (
+			SELECT DISTINCT ON (elevator_id)
+				elevator_id,
+				latest_inspection_date,
+				outcome
+			FROM inspections
+			ORDER BY elevator_id, latest_inspection_date DESC
+		)
+		SELECT
+			e.elevator_id,
+			p.risk_score,
+			p.risk_level,
+			li.latest_inspection_date::text  AS last_inspection_date,
+			li.outcome                        AS last_inspection_outcome,
+			COALESCE(NULLIF(TRIM(e.device_type), ''), '') AS equipment_type
+		FROM elevators e
+		JOIN predictions p  ON p.elevator_id  = e.elevator_id
+		JOIN latest_insp li ON li.elevator_id = e.elevator_id
+		WHERE p.risk_level = 'high' AND li.outcome != 'Passed'
+		ORDER BY p.risk_score DESC
+	`)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
 	}
+	defer rows.Close()
 
-	sort.Slice(alerts, func(i, j int) bool {
-		return alerts[i].RiskScore > alerts[j].RiskScore
-	})
-
-	if alerts == nil {
-		alerts = []fleetAlertItem{}
+	alerts := []fleetAlertItem{}
+	for rows.Next() {
+		var a fleetAlertItem
+		if err := rows.Scan(
+			&a.ElevatorID, &a.RiskScore, &a.RiskLevel,
+			&a.LastInspectionDate, &a.LastInspectionOutcome, &a.EquipmentType,
+		); err != nil {
+			writeErr(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		alerts = append(alerts, a)
 	}
-
 	writeJSON(w, http.StatusOK, alerts)
 }
 
 // --- Helpers ---
+
+func elevatorExists(ctx context.Context, id int) (bool, error) {
+	var exists bool
+	err := db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM elevators WHERE elevator_id = $1)", id).Scan(&exists)
+	return exists, err
+}
 
 func parseElevatorID(w http.ResponseWriter, r *http.Request) (int, bool) {
 	id, err := strconv.Atoi(r.PathValue("id"))
@@ -714,17 +504,13 @@ func oneOf(v string, options ...string) bool {
 	return false
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // --- Main ---
 
 func main() {
-	loadData()
+	if err := initDB(); err != nil {
+		fmt.Fprintf(os.Stderr, "database init failed: %v\n", err)
+		os.Exit(1)
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -732,6 +518,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/health", handleHealth)
 	mux.HandleFunc("GET /api/elevators", handleListElevators)
 	mux.HandleFunc("GET /api/elevators/{id}", handleGetElevator)
 	mux.HandleFunc("GET /api/elevators/{id}/inspections", handleGetInspections)
