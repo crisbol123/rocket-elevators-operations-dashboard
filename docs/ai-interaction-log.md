@@ -545,3 +545,13 @@ Claude hadn't flagged that `generate_predictions.ipynb` scores 40,916 elevators 
 ## AND-105 Task 3 — What ON CONFLICT DO NOTHING actually does
 
 I hadn't seen this SQL pattern before. Claude used it in every INSERT but didn't explain it upfront. I asked and the short version is: if you try to insert a row whose primary key already exists, Postgres silently ignores it instead of throwing an error. That's what makes the ETL safe to re-run without duplicate key crashes.
+
+
+## AND-105 Task 4 — Most complex query to convert
+
+The hardest one was `handleFleetAlerts`. In the CSV version it was just a Go loop — iterate the fleet, check risk level, look up the latest inspection in a pre-sorted map. Converting that to SQL meant using `DISTINCT ON (elevator_id)` to get the most recent inspection per elevator, then joining predictions and filtering by `risk_level = 'high'` and `outcome != 'Passed'`. I hadn't used `DISTINCT ON` before, it's a Postgres-specific way to keep only the first row per group after sorting.
+
+
+## AND-105 Task 4 — What Claude got wrong on the first attempt
+
+Claude left dead code in the rewrite — a `nullStr` function that was never called and kept the `strings` import alive just by existing. It compiled fine so there was no error, but it was useless code. I caught it when reviewing. Claude also didn't flag upfront that the CSV volume mounts in `docker-compose.yml` were now dead config — I had to ask about it. The queries and response format were correct on the first attempt though, `/validate-api` passed all 6 endpoints without fixes.
