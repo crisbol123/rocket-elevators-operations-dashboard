@@ -552,6 +552,16 @@ I hadn't seen this SQL pattern before. Claude used it in every INSERT but didn't
 The hardest one was `handleFleetAlerts`. In the CSV version it was just a Go loop — iterate the fleet, check risk level, look up the latest inspection in a pre-sorted map. Converting that to SQL meant using `DISTINCT ON (elevator_id)` to get the most recent inspection per elevator, then joining predictions and filtering by `risk_level = 'high'` and `outcome != 'Passed'`. I hadn't used `DISTINCT ON` before, it's a Postgres-specific way to keep only the first row per group after sorting.
 
 
+
+
 ## AND-105 Task 4 — What Claude got wrong on the first attempt
 
 Claude left dead code in the rewrite — a `nullStr` function that was never called and kept the `strings` import alive just by existing. It compiled fine so there was no error, but it was useless code. I caught it when reviewing. Claude also didn't flag upfront that the CSV volume mounts in `docker-compose.yml` were now dead config — I had to ask about it. The queries and response format were correct on the first attempt though, `/validate-api` passed all 6 endpoints without fixes.
+
+## AND-105 Task 5 — Writer/Reviewer session split
+
+I used `/rename` to label the implementation session `db-writer`, then opened a separate `db-reviewer` session with `claude --worktree` so the reviewer had zero context about how I'd written the code. That isolation mattered — the reviewer didn't know I'd already validated the whitelist on `orderCol`/`sortDir`, so it came in clean and confirmed those were genuinely safe rather than rubber-stamping my own reasoning.
+
+The worktree cleaned itself up when I exited the session. I ran a fan-out with `claude -p` in parallel across `main.go` and `db.go`, which surfaced the same top finding (context propagation) independently. `/code-review` and `/security-review` added the hardcoded credential warning and confirmed the dropped Scan errors.
+
+The top fix was `context.Background()` → `r.Context()` in all six handlers — found by every method. No CRITICAL issues existed, so that was the top WARNING addressed.

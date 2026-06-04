@@ -182,7 +182,7 @@ func handleListElevators(w http.ResponseWriter, r *http.Request) {
 		ORDER BY ` + orderCol + ` ` + sortDir + `
 		LIMIT 10 OFFSET $6`
 
-	ctx := context.Background()
+	ctx := r.Context()
 	dbRows, err := db.Query(ctx, query, status, expired, inspection, searchID, searchLoc, (page-1)*10)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "database error")
@@ -231,7 +231,7 @@ func handleGetElevator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx := r.Context()
 	var resp detailResponse
 	err := db.QueryRow(ctx, `
 		SELECT
@@ -276,7 +276,7 @@ func handleGetInspections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx := r.Context()
 	exists, err := elevatorExists(ctx, id)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "database error")
@@ -322,7 +322,7 @@ func handleGetRisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx := r.Context()
 	exists, err := elevatorExists(ctx, id)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "database error")
@@ -357,7 +357,7 @@ func handleGetRisk(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleFleetStats(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 
 	var predCount int
 	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM predictions").Scan(&predCount); err != nil || predCount == 0 {
@@ -417,7 +417,7 @@ func handleFleetStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleFleetAlerts(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 
 	var predCount int
 	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM predictions").Scan(&predCount); err != nil || predCount == 0 {
