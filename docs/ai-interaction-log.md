@@ -564,4 +564,11 @@ I used `/rename` to label the implementation session `db-writer`, then opened a 
 
 The worktree cleaned itself up when I exited the session. I ran a fan-out with `claude -p` in parallel across `main.go` and `db.go`, which surfaced the same top finding (context propagation) independently. `/code-review` and `/security-review` added the hardcoded credential warning and confirmed the dropped Scan errors.
 
-The top fix was `context.Background()` → `r.Context()` in all six handlers — found by every method. No CRITICAL issues existed, so that was the top WARNING addressed.
+
+## AND-105 Task 6 — /branch exploration and prompt Reviewer findings
+
+**Which branch direction I chose and why:** I used `/branch` twice — `prompt-guardrails` to tighten rules against filler and speculation, and `prompt-contrast` to force the model to identify what makes each elevator unique. I chose `prompt-guardrails` (V2). The contrast branch produced more specific explanations but also hallucinated facts under pressure ("shut down twice" — not in the data), which is unacceptable in a compliance context. The guardrails branch was safer.
+
+**What the Reviewer found that I missed:** The biggest blind spot was the task instruction itself — "explain why this elevator has a high risk score" hardcodes the assumption before the model reads the data, so it rationalizes a high-risk narrative regardless of the actual score. I also missed that "cite specific counts" and "if a category is empty, omit it" contradict each other when there are no counts to cite. The Reviewer also flagged causal priming: stating upfront that inspection history drives the score trains the model to lead with inspections even when the data tells a different story.
+
+**Did the fresh-context review surface something the Writer session was blind to?** Yes. The Writer was so focused on fixing the filler problem from V1 that it never questioned the framing of the task instruction itself. The Reviewer had no attachment to that history and spotted it immediately. The Writer optimizes within a frame — the Reviewer questions the frame.
