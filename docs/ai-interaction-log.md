@@ -572,3 +572,21 @@ The worktree cleaned itself up when I exited the session. I ran a fan-out with `
 **What the Reviewer found that I missed:** The biggest blind spot was the task instruction itself — "explain why this elevator has a high risk score" hardcodes the assumption before the model reads the data, so it rationalizes a high-risk narrative regardless of the actual score. I also missed that "cite specific counts" and "if a category is empty, omit it" contradict each other when there are no counts to cite. The Reviewer also flagged causal priming: stating upfront that inspection history drives the score trains the model to lead with inspections even when the data tells a different story.
 
 **Did the fresh-context review surface something the Writer session was blind to?** Yes. The Writer was so focused on fixing the filler problem from V1 that it never questioned the framing of the task instruction itself. The Reviewer had no attachment to that history and spotted it immediately. The Writer optimizes within a frame — the Reviewer questions the frame.
+
+
+## AND-105 Task 6 — Context fed to the model
+
+Prompt: "Build the elevator context from what the task spec lists."
+
+What happened: I only pulled what the spec asked for — last 5 inspections, incidents, alterations. I never thought to check what features actually drove the risk scores. The user pointed me to `ml_pipeline.ipynb` and asked me to check. Turns out the model was trained on `needs_action_rate` and `pass_rate` over the full history, not just 5 inspections. I added the outcome summary after that.
+
+What I would change: Before building LLM context for score explanations, check how those scores were generated first. The spec tells you the minimum, not necessarily what matters.
+
+
+## AND-105 Task 6 — Incident date window
+
+Prompt: "Query incidents in the past 2 years."
+
+What happened: I used `datetime.now() - 2 years` which in 2026 returns nothing — the dataset only goes up to 2016. I didn't question it at all. The user caught it and asked me to anchor the window to the dataset's own date range instead. Fixed it by querying `MAX(date_of_occurrence)` first and subtracting from there.
+
+What I would change: Always check the date range of a historical dataset before applying filters relative to today.
