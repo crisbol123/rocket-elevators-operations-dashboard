@@ -590,3 +590,14 @@ Prompt: "Query incidents in the past 2 years."
 What happened: I used `datetime.now() - 2 years` which in 2026 returns nothing — the dataset only goes up to 2016. I didn't question it at all. The user caught it and asked me to anchor the window to the dataset's own date range instead. Fixed it by querying `MAX(date_of_occurrence)` first and subtracting from there.
 
 What I would change: Always check the date range of a historical dataset before applying filters relative to today.
+
+
+## AND-105 Task 7: Worktree alt-explain — llama3b vs llama3.1:8b
+
+I ran the same SYSTEM_FINAL prompt against 10 high-risk elevators using both `llama3.1:8b-instruct-q8_0` and `llama3.2:latest` to see if the smaller model was good enough to replace the bigger one.
+
+The 3b model was about 2.7x faster (2.8s vs 7.6s per elevator), which is a real advantage at scale. But the accuracy wasn't there. On elevator 72362 it wrote "failed all 5 inspections" when there are only 2 in the data — it seems to have picked up the "last 5 inspections" section header and treated it as a count. On elevator 72216 it said the most recent inspection was in 2013 and passed, which is wrong on both counts: the most recent was November 2016 and it resulted in a DC Follow up. It also added editorial lines on a couple of elevators ("the lack of incidents does not mitigate the overall risk") that the prompt explicitly rules out.
+
+The 8b model had one minor slip on the same elevator 72362 — it mentioned "the last five inspections" in a way that implied five total — but it didn't invent a number and the rest of its outputs were clean.
+
+speed is not the right axis for choosing a model when the output goes into a compliance tool. A fabricated count or a wrong date is worse than a slow correct answer. Before swapping to a smaller model I'd run a spot-check specifically on elevators with low inspection counts, since that's where the smaller model was most likely to confuse a section header with actual data.

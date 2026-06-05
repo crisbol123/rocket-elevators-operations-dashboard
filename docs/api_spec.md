@@ -276,12 +276,13 @@ Returns the predicted risk score for a specific elevator.
 
 **Success response — 200 OK:**
 
-| Field | Type |
-|---|---|
-| elevator_id | integer |
-| risk_score | float |
-| risk_level | string (low, medium, high) |
-| predicted_at | string (YYYY-MM-DD) |
+| Field | Type | Notes |
+|---|---|---|
+| elevator_id | integer | |
+| risk_score | float | |
+| risk_level | string (low, medium, high) | |
+| predicted_at | string (YYYY-MM-DD) | |
+| risk_explanation | string \| null | Natural-language explanation of risk factors; populated for `high` elevators, `null` for others |
 
 #### Example Response
 
@@ -290,7 +291,8 @@ Returns the predicted risk score for a specific elevator.
   "elevator_id": 10,
   "risk_score": 0.73,
   "risk_level": "high",
-  "predicted_at": "2026-05-26"
+  "predicted_at": "2026-05-26",
+  "risk_explanation": "This elevator has a high risk score driven by recent inspection failures and an above-average incident rate."
 }
 ```
 

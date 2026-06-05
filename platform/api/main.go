@@ -56,10 +56,11 @@ type inspectionResponse struct {
 }
 
 type riskResponse struct {
-	ElevatorID  int     `json:"elevator_id"`
-	RiskScore   float64 `json:"risk_score"`
-	RiskLevel   string  `json:"risk_level"`
-	PredictedAt string  `json:"predicted_at"`
+	ElevatorID      int     `json:"elevator_id"`
+	RiskScore       float64 `json:"risk_score"`
+	RiskLevel       string  `json:"risk_level"`
+	PredictedAt     string  `json:"predicted_at"`
+	RiskExplanation *string `json:"risk_explanation"`
 }
 
 type errResponse struct {
@@ -335,10 +336,10 @@ func handleGetRisk(w http.ResponseWriter, r *http.Request) {
 
 	var resp riskResponse
 	err = db.QueryRow(ctx, `
-		SELECT elevator_id, risk_score, risk_level, prediction_date::text
+		SELECT elevator_id, risk_score, risk_level, prediction_date::text, risk_explanation
 		FROM predictions
 		WHERE elevator_id = $1
-	`, id).Scan(&resp.ElevatorID, &resp.RiskScore, &resp.RiskLevel, &resp.PredictedAt)
+	`, id).Scan(&resp.ElevatorID, &resp.RiskScore, &resp.RiskLevel, &resp.PredictedAt, &resp.RiskExplanation)
 	if err == pgx.ErrNoRows {
 		var count int
 		db.QueryRow(ctx, "SELECT COUNT(*) FROM predictions").Scan(&count)
