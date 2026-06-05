@@ -1,7 +1,9 @@
 """
 ## AND-105 Task 7: Batch Generation and Storage
 
-Generate risk explanations for all high-risk elevators and store them in the predictions table.
+Generate risk explanations for high-risk elevators and store them in the predictions table.
+Incremental: only processes high-risk elevators whose risk_explanation is still NULL, so
+re-running picks up where it left off instead of regenerating everything.
 Model: llama3.1:8b-instruct-q8_0 via Ollama.
 System prompt: SYSTEM_FINAL from risk_explanations.ipynb (Task 6).
 """
@@ -219,16 +221,17 @@ def main() -> None:
             FROM predictions p
             JOIN elevators e ON e.elevator_id = p.elevator_id
             WHERE p.risk_level = 'high'
+              AND p.risk_explanation IS NULL
             ORDER BY p.risk_score DESC
             """
         )
         base_rows = [dict(r) for r in cur.fetchall()]
 
     total = len(base_rows)
-    print(f"Found {total} high-risk elevators")
+    print(f"Found {total} high-risk elevators without an explanation")
 
     if total == 0:
-        print("Nothing to process.")
+        print("Nothing to process — all high-risk elevators already explained.")
         conn.close()
         return
 
