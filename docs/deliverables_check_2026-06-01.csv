@@ -1,0 +1,10 @@
+Deliverable,Descripcion,Submission Format,Presente,Completo,Evidencia/Notas
+1,"AI Interaction Log","docs/ai-interaction-log.md",SI,SI,"Existe docs/ai-interaction-log.md con múltiples entradas por tareas; incluye decisiones de workflow/context y menciones a reviewer con worktree (claude --worktree)."
+2,"Docker configuration","docker-compose.yml; platform/api/Dockerfile",SI,SI,"docker-compose.yml define db (postgres) + api con healthcheck/depends_on y env vars; platform/api/Dockerfile es multi-stage (builder Go + runtime)."
+3,"Database schema","docs/dashboard_spec.md; platform/api/migrations/001_initial_schema.sql",SI,SI,"dashboard_spec.md contiene 'AND-105 Task 2: Relational Data Model' con PK/normalización/índices; 001_initial_schema.sql crea 5 tablas con constraints/índices."
+4,"Data migration script","intelligence/etl_to_database.py",SI,SI,"Carga license/inspection/incident/altered/predictions; aplica migración; maneja datos malos (skips) e idempotencia con ON CONFLICT DO NOTHING."
+5,"Go database integration","platform/api/",SI,SI,"Handlers en platform/api/main.go consultan PostgreSQL con queries parametrizadas ($1..); no lectura de CSV en endpoints."
+6,"Code review report + PR","docs/code_review_report.md; GitHub PR",SI,SI,"docs/code_review_report.md existe y describe reviewer en worktree + fan-out; PR #1 existe y fue mergeada (2026-06-04)."
+7,"Risk explanation prototype","intelligence/risk_explanations.ipynb",SI,SI,"Notebook documenta variaciones de prompt y genera explicaciones para 10 elevadores."
+8,"Batch explanation generation","intelligence/generate_explanations.py",SI,SI,"Script actualiza predictions.risk_explanation para high-risk y ahora es incremental/idempotente (procesa solo donde risk_explanation IS NULL; commit 2026-06-05). Nota: no hay evidencia explícita de 'worktree comparison' en el repo para este deliverable."
+9,"Explanation evaluation","intelligence/explanation_evaluation.ipynb + evaluation process",SI,SI,"Notebook evalúa 10, define escala (correct/minor/major/hallucination), identifica failure modes y deja proceso repetible (grader automático vs DB)."
