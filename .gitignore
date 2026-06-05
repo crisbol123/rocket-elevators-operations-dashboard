@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 platform/api/rocket-elevators-api
 .env
+predictions.sql
